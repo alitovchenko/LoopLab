@@ -27,6 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dev = ["pytest>=7"]
 mne = ["mne>=1.5"]
 psychopy = ["psychopy>=2023.2"]
 yaml = ["pyyaml>=6"]

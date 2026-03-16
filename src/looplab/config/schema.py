@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +39,11 @@ class RunConfig:
     log_path: str = "looplab_events.jsonl"
     record_stream_path: str | None = None
     benchmark: bool = False
+
+
+def config_to_dict(config: RunConfig) -> dict[str, Any]:
+    """Convert RunConfig (and nested LSLStreamConfig, BufferConfig) to a JSON-serializable dict."""
+    return asdict(config)
 
 
 def load_config(path: str | Path) -> RunConfig:

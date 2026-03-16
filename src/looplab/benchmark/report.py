@@ -45,6 +45,29 @@ def latency_report(
     return report
 
 
+def format_report_human(report: dict[str, Any]) -> str:
+    """
+    Human-readable summary of latency report.
+    Returns lines like "E2E latency (chunk→control): mean 0.012 s (N samples)".
+    """
+    if not report or (not report.get("e2e_latency_seconds") and "intended_to_realized_seconds" not in report):
+        return "No benchmark events in log (run with benchmark: true and record benchmark_latency events)."
+    lines = []
+    if "e2e_latency_seconds" in report:
+        e2e = report["e2e_latency_seconds"]
+        n = len(e2e)
+        mean_s = report.get("e2e_mean")
+        if mean_s is not None:
+            lines.append(f"E2E latency (chunk→control): mean {mean_s:.4f} s ({n} samples)")
+    if "intended_to_realized_seconds" in report:
+        ir = report["intended_to_realized_seconds"]
+        n = len(ir)
+        mean_s = report.get("intended_to_realized_mean")
+        if mean_s is not None:
+            lines.append(f"Intended→realized: mean {mean_s:.4f} s ({n} samples)")
+    return "\n".join(lines) if lines else "No benchmark events in log."
+
+
 class BenchmarkReport:
     """Build report from BenchmarkHooks points."""
 

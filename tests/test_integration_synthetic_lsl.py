@@ -2,13 +2,11 @@
 
 import json
 import tempfile
-import threading
 import time
 from pathlib import Path
 
 import numpy as np
 import pytest
-import pylsl
 
 from looplab.buffer.ring_buffer import RingBuffer
 from looplab.controller.loop import ControllerLoop
@@ -18,29 +16,7 @@ from looplab.logging.event_logger import EventLogger
 from looplab.logging.writers import JSONLWriter
 from looplab.model.example_models import IdentityModel
 from looplab.preprocess.pipeline import noop_preprocess
-
-
-def _run_fake_lsl_outlet(duration: float, n_channels: int = 2, srate: float = 100.0):
-    """Push fake EEG chunks for duration seconds."""
-    cf = getattr(pylsl, "cf_float32", getattr(pylsl, "ChannelFormat", None))
-    if cf is None:
-        cf = 1
-    info = pylsl.StreamInfo(
-        "FakeEEG",
-        "EEG",
-        n_channels,
-        srate,
-        cf,
-        "fake_source_123",
-    )
-    outlet = pylsl.StreamOutlet(info, chunk_size=16)
-    start = pylsl.local_clock()
-    sample = np.zeros(n_channels, dtype=np.float32)
-    while pylsl.local_clock() - start < duration:
-        sample[:] = np.random.randn(n_channels).astype(np.float32)
-        outlet.push_sample(sample.tolist())
-        time.sleep(0.02)
-    outlet.__del__()
+from looplab.streams.synthetic import start_synthetic_outlet_thread
 
 
 def test_synthetic_lsl_to_control_and_log():
@@ -51,8 +27,7 @@ def test_synthetic_lsl_to_control_and_log():
 
     # Start fake outlet in background
     duration = 2.0
-    thread = threading.Thread(target=_run_fake_lsl_outlet, args=(duration, 2, 50.0))
-    thread.start()
+    thread = start_synthetic_outlet_thread(duration, n_channels=2, srate=50.0, stream_name="FakeEEG")
     time.sleep(0.8)
 
     try:

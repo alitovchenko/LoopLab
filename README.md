@@ -27,6 +27,22 @@ pip install -e ".[full]"
 
 Requires Python 3.10+, `numpy`, `pylsl`.
 
+## Testing
+
+The test suite includes an e2e test that runs `python -m looplab proof-run` in a subprocess, so **the package must be installed** (e.g. editable) before running tests. To confirm proof-run test behavior locally, mirror CI with this exact sequence:
+
+```bash
+python -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e .[dev]
+.venv/bin/python -m pytest
+```
+
+Optional (run proof-run manually):  
+`.venv/bin/python -m looplab proof-run --duration 2 --out-dir proof_run_output`
+
+Or after activating the venv: `pip install -e .[dev]` then `python -m pytest`. The `[dev]` extra installs pytest; `pip install -e .` alone is enough if pytest is already available.
+
 ## Quick start
 
 1. **Config** (YAML or JSON):
@@ -66,6 +82,37 @@ python -m looplab replay --log session.jsonl --stream session_stream.jsonl --see
 python -m looplab benchmark --log session.jsonl
 ```
 
+## Phase 1 proof run (canonical verification)
+
+Phase 1 is validated by a **proof run**: one command, no EEG hardware, synthetic LSL stream, full record → replay → divergence report → benchmark. Use it to verify the installation and that all completion criteria are met.
+
+```bash
+python -m looplab proof-run
+```
+
+Optional flags: `--duration 4` (seconds), `--out-dir proof_run_output`, `--seed 42`, `--strict` (exit 1 if replay diverges).
+
+**What to expect:** A short session runs (a few seconds), then:
+- Replay: `Replay: N/N control signals matched (determinism OK).`
+- Benchmark: human-readable summary, e.g. `E2E latency (chunk→control): mean 0.012 s (N samples)`.
+- Final line: `Proof-run: all checks passed.`
+- Exit code 0 means all checks passed; exit code 2 means LSL discovery failed (e.g. in a restricted environment).
+
+**Canonical proof artifact:** Proof-run writes a fixed set of files under `--out-dir` (e.g. `proof_run_output/`):
+
+| File | Contents |
+|------|----------|
+| `config_snapshot.json` | RunConfig used for the run (LSL, buffer, paths, etc.), JSON-serializable. |
+| `events.jsonl` | Event log (one JSON object per line). |
+| `stream.jsonl` | Recorded LSL stream chunks. |
+| `replay_result.json` | Replay outcome: `match_count`, `mismatch_count`, `total_logged`, `total_replayed`, `matches`, `divergences`. |
+| `benchmark_summary.json` | Latency report (e.g. e2e mean, intended→realized if present). |
+| `session_summary.json` | High-level summary: `duration_sec`, `seed`, `out_dir`, `artifacts_ok`, `replay_ok`, `lsl_available`, `timestamp`. |
+
+When LSL discovery fails (exit 2), `out_dir` may still contain `config_snapshot.json` and a minimal `session_summary.json` with `lsl_available: false` and an `error` field.
+
+No hardware or config file required. Another developer can clone the repo, `pip install -e .`, and run this to confirm Phase 1 works end-to-end.
+
 ## Project layout
 
 ```
@@ -82,7 +129,7 @@ src/looplab/
   replay/        # StreamRecorder, ReplayEngine, ReplayRunner
   config/        # RunConfig, load_config
   runner.py      # create_runner
-  __main__.py    # CLI: run, replay, benchmark
+  __main__.py    # CLI: run, replay, benchmark, proof-run
 ```
 
 ## PsychoPy integration

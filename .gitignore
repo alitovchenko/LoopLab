@@ -18,6 +18,7 @@ build/
 *.jsonl
 looplab_events.jsonl
 session*.jsonl
+proof_run_output/
 
 # Pytest
 .pytest_cache/
