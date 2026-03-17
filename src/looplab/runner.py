@@ -15,8 +15,6 @@ from looplab.logging.event_logger import EventLogger
 from looplab.logging.writers import JSONLWriter
 from looplab.model.base import create_model
 from looplab.preprocess.pipeline import PreprocessPipeline, noop_preprocess
-from looplab.streams.clock import lsl_clock
-from looplab.streams.lsl_client import LSLInletClient
 from looplab.task.psychopy_adapter import PsychoPyTaskAdapter
 from looplab.replay.stream_recorder import StreamRecorder
 from looplab.benchmark.hooks import BenchmarkHooks

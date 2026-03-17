@@ -20,14 +20,16 @@ CANONICAL_FILES = (
 
 def test_proof_run_e2e():
     """
-    Run proof-run in subprocess. Assert: all six canonical artifact files exist;
-    session_summary has artifacts_ok, replay_ok; replay_result has matches true when successful;
-    replay output reports match (determinism OK). Skip if LSL discovery fails (exit code 2).
+    Run proof-run in subprocess with --backend synthetic (no LSL). Assert: all six canonical
+    artifact files exist; session_summary has artifacts_ok, replay_ok; replay_result has
+    matches true; replay output reports match (determinism OK). This test is CI-safe and
+    does not touch native LSL.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         result = subprocess.run(
             [
                 sys.executable, "-m", "looplab", "proof-run",
+                "--backend", "synthetic",
                 "--duration", "2.0",
                 "--out-dir", tmpdir,
                 "--seed", "42",
@@ -37,12 +39,6 @@ def test_proof_run_e2e():
             timeout=30,
             cwd=Path(__file__).resolve().parents[1],
         )
-        if result.returncode == 2:
-            reason = "Proof-run skipped: LSL stream discovery failed (e.g. CI/sandbox)"
-            stderr = (result.stderr or "").strip()
-            if stderr:
-                reason += f"; stderr: {stderr}"
-            pytest.skip(reason)
         stderr = result.stderr or ""
         stdout = result.stdout or ""
 

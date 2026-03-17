@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  # Default: unit tests, replay agreement, proof artifact structure, proof-run graceful failure.
-  # Does not set RUN_LSL_TESTS, so test_integration_synthetic_lsl.py is skipped.
+  # Default: unit tests, replay agreement, proof artifact structure, proof-run (synthetic backend only).
+  # No native LSL: proof-run uses --backend synthetic by default; test_integration_synthetic_lsl.py skipped.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -31,14 +31,18 @@ jobs:
       - name: Run tests
         run: .venv/bin/python -m pytest
 
-  # Optional: native LSL integration. Run only when explicitly enabled; allow failure so
-  # core contract is not blocked by upstream LSL instability.
+  # Optional / monitoring only: native LSL integration. This job does NOT gate the workflow.
+  # It monitors upstream (pylsl/liblsl) and environment compatibility. A red X here means
+  # native LSL is unstable in this environment, not a LoopLab platform regression.
   test-lsl:
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
       RUN_LSL_TESTS: "1"
     steps:
+      - name: Note — optional native LSL monitoring
+        run: echo "This job monitors upstream/native LSL compatibility only. Failure here does not indicate a platform regression."
+
       - uses: actions/checkout@v4
 
       - name: Set up Python
@@ -57,3 +61,6 @@ jobs:
 
       - name: Run LSL integration tests
         run: .venv/bin/python -m pytest tests/test_integration_synthetic_lsl.py -v
+
+      - name: Proof-run with LSL backend
+        run: .venv/bin/python -m looplab proof-run --backend lsl --duration 2 --out-dir proof_run_lsl

@@ -41,7 +41,7 @@ python -m venv .venv
 Optional (run proof-run manually):  
 `.venv/bin/python -m looplab proof-run --duration 2 --out-dir proof_run_output`
 
-Tests that require native LSL discovery (`tests/test_integration_synthetic_lsl.py`) are skipped unless `RUN_LSL_TESTS=1`. CI runs them in a separate, optional job so the core contract is not blocked by LSL instability.
+Tests that require native LSL discovery (`tests/test_integration_synthetic_lsl.py`) are skipped unless `RUN_LSL_TESTS=1`. CI runs them in a separate **optional, monitoring-only** job (`test-lsl`): that lane monitors upstream/native LSL compatibility only. A failure there does not indicate a LoopLab regression—only that native LSL is unstable in that environment.
 
 Or after activating the venv: `pip install -e .[dev]` then `python -m pytest`. The `[dev]` extra installs pytest; `pip install -e .` alone is enough if pytest is already available.
 

@@ -26,7 +26,8 @@ def main() -> None:
     bench_p.add_argument("--log", required=True, help="Event log JSONL path")
     bench_p.add_argument("--human", action="store_true", help="Print only human-readable summary (no JSON)")
 
-    proof_p = sub.add_parser("proof-run", help="Canonical proof run: synthetic LSL, record, replay, benchmark (no hardware)")
+    proof_p = sub.add_parser("proof-run", help="Canonical proof run: record, replay, benchmark (no hardware)")
+    proof_p.add_argument("--backend", choices=["synthetic", "lsl"], default="synthetic", help="synthetic: pure Python, no LSL (CI-safe). lsl: real LSL discovery (default synthetic)")
     proof_p.add_argument("--duration", "-d", type=float, default=4.0, help="Session duration in seconds (default 4)")
     proof_p.add_argument("--out-dir", type=str, default="proof_run_output", help="Output directory for log and stream (default proof_run_output)")
     proof_p.add_argument("--seed", type=int, default=42, help="Random seed for replay (default 42)")
@@ -154,12 +155,9 @@ def main() -> None:
         import time as _time
         from pathlib import Path as _Path
 
-        from datetime import datetime as _datetime
+        import numpy as _np
+        from datetime import datetime as _datetime, timezone as _timezone
         from looplab.config.schema import RunConfig, LSLStreamConfig, BufferConfig, config_to_dict
-        from looplab.runner import create_runner
-        from looplab.streams.lsl_client import LSLInletClient
-        from looplab.streams.clock import lsl_clock
-        from looplab.streams.synthetic import start_synthetic_outlet_thread
         from looplab.replay.engine import ReplayEngine
         from looplab.replay.runner import ReplayRunner
         from looplab.replay.divergence import compute_divergence, format_divergence_report
@@ -193,63 +191,139 @@ def main() -> None:
             _json.dump(config_to_dict(config), f, indent=2)
 
         duration = args.duration
-        thread = start_synthetic_outlet_thread(duration + 1.0, n_channels=2, srate=50.0, stream_name="FakeEEG")
-        _time.sleep(0.8)
+        backend = getattr(args, "backend", "synthetic")
 
-        try:
-            client = LSLInletClient(name="FakeEEG", timeout=5.0, chunk_size=8)
-            client.connect()
-        except RuntimeError as e:
-            if "No LSL stream" in str(e):
-                print("Proof-run skipped: LSL stream discovery failed (e.g. network/sandbox).", file=sys.stderr)
-                session_fail = {
-                    "lsl_available": False,
-                    "error": "LSL stream discovery failed (e.g. network/sandbox)",
-                    "out_dir": str(out_dir),
-                }
-                with open(out_dir / "session_summary.json", "w", encoding="utf-8") as f:
-                    _json.dump(session_fail, f, indent=2)
-                sys.exit(2)
-            raise
+        if backend == "synthetic":
+            # Pure Python path: no pylsl. Set synthetic clock before any code that calls lsl_clock().
+            _t0_wall = _time.monotonic()
+            _base_time = 1000.0
 
-        components = create_runner(config)
-        loop = components["loop"]
-        buffer = components["buffer"]
-        writer = components["writer"]
-        hooks = components.get("hooks")
-        recorder = components.get("recorder")
-        writer.open()
-        if recorder:
-            recorder.open()
+            def _synthetic_clock() -> float:
+                return _base_time + (_time.monotonic() - _t0_wall)
 
-        start = lsl_clock()
-        tick_interval = 1.0 / 10.0
-        next_tick = start
-        try:
-            while lsl_clock() - start < duration:
-                data, timestamps = client.pull_chunk(timeout=0.1, max_samples=32)
-                if data.size > 0:
+            from looplab.streams import clock as _clock_mod
+            _clock_mod.set_clock(_synthetic_clock)
+
+            from looplab.runner import create_runner
+            from looplab.controller.loop import ControllerLoop
+            components = create_runner(config)
+            # Use min_samples=8 so we get one control signal per chunk (chunk_size=8), matching ReplayRunner.
+            loop = ControllerLoop(
+                buffer=components["buffer"],
+                preprocess=components["preprocess"],
+                feature_extractor=components["feature_extractor"],
+                model=components["model"],
+                policy=components["policy"],
+                adapter=components["adapter"],
+                logger=components["logger"],
+                min_samples=8,
+            )
+            buffer = components["buffer"]
+            writer = components["writer"]
+            hooks = components.get("hooks")
+            recorder = components.get("recorder")
+            writer.open()
+            if recorder:
+                recorder.open()
+
+            lsl_clock = _clock_mod.lsl_clock
+            start = lsl_clock()
+            chunk_interval = 0.02
+            n_channels = 2
+            chunk_size = 8
+            srate = 50.0
+            rng = _np.random.default_rng(42)
+            _np.random.seed(42)
+            sample_idx = 0
+            try:
+                while lsl_clock() - start < duration:
+                    # Generate one chunk (deterministic). Tick once per chunk to match ReplayRunner discipline.
+                    data = rng.standard_normal((chunk_size, n_channels)).astype(_np.float64)
+                    ts_start = start + sample_idx / srate
+                    timestamps = [ts_start + j / srate for j in range(chunk_size)]
+                    sample_idx += chunk_size
                     buffer.append(data, timestamps)
                     if hooks:
                         hooks.record_pull_chunk(lsl_clock())
-                    if recorder and timestamps:
+                    if recorder:
                         recorder.record(data, timestamps)
-                now = lsl_clock()
-                if now >= next_tick:
+                    now = lsl_clock()
                     if hooks:
                         hooks.record_preprocess_done(now)
                     c = loop.tick()
                     if hooks and c:
                         hooks.record_policy_done(now)
-                    next_tick = now + tick_interval
-        finally:
-            client.close()
-            writer.close()
-            if recorder:
-                recorder.close()
-        thread.join(timeout=10)
+                    _time.sleep(chunk_interval)
+            finally:
+                writer.close()
+                if recorder:
+                    recorder.close()
+            print("Proof-run: session recorded (synthetic backend).", file=sys.stderr)
+        else:
+            # LSL backend: real stream discovery (may segfault in CI).
+            from looplab.streams import clock as _clock_mod
+            _clock_mod.set_clock(None)
+            from looplab.runner import create_runner
+            from looplab.streams.lsl_client import LSLInletClient
+            from looplab.streams.clock import lsl_clock
+            from looplab.streams.synthetic import start_synthetic_outlet_thread
 
-        print("Proof-run: session recorded.", file=sys.stderr)
+            thread = start_synthetic_outlet_thread(duration + 1.0, n_channels=2, srate=50.0, stream_name="FakeEEG")
+            _time.sleep(0.8)
+
+            try:
+                client = LSLInletClient(name="FakeEEG", timeout=5.0, chunk_size=8)
+                client.connect()
+            except RuntimeError as e:
+                if "No LSL stream" in str(e):
+                    print("Proof-run skipped: LSL stream discovery failed (e.g. network/sandbox).", file=sys.stderr)
+                    session_fail = {
+                        "lsl_available": False,
+                        "error": "LSL stream discovery failed (e.g. network/sandbox)",
+                        "out_dir": str(out_dir),
+                    }
+                    with open(out_dir / "session_summary.json", "w", encoding="utf-8") as f:
+                        _json.dump(session_fail, f, indent=2)
+                    sys.exit(2)
+                raise
+
+            components = create_runner(config)
+            loop = components["loop"]
+            buffer = components["buffer"]
+            writer = components["writer"]
+            hooks = components.get("hooks")
+            recorder = components.get("recorder")
+            writer.open()
+            if recorder:
+                recorder.open()
+
+            start = lsl_clock()
+            tick_interval = 1.0 / 10.0
+            next_tick = start
+            try:
+                while lsl_clock() - start < duration:
+                    data, timestamps = client.pull_chunk(timeout=0.1, max_samples=32)
+                    if data.size > 0:
+                        buffer.append(data, timestamps)
+                        if hooks:
+                            hooks.record_pull_chunk(lsl_clock())
+                        if recorder and timestamps:
+                            recorder.record(data, timestamps)
+                    now = lsl_clock()
+                    if now >= next_tick:
+                        if hooks:
+                            hooks.record_preprocess_done(now)
+                        c = loop.tick()
+                        if hooks and c:
+                            hooks.record_policy_done(now)
+                        next_tick = now + tick_interval
+            finally:
+                client.close()
+                writer.close()
+                if recorder:
+                    recorder.close()
+            thread.join(timeout=10)
+            print("Proof-run: session recorded (LSL backend).", file=sys.stderr)
 
         # Replay
         engine = ReplayEngine(str(log_path), str(stream_path))
@@ -305,8 +379,9 @@ def main() -> None:
             "out_dir": str(out_dir),
             "artifacts_ok": artifacts_ok,
             "replay_ok": replay_ok,
-            "lsl_available": True,
-            "timestamp": _datetime.utcnow().isoformat() + "Z",
+            "lsl_available": (backend == "lsl"),
+            "backend": backend,
+            "timestamp": _datetime.now(_timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         with open(out_dir / "session_summary.json", "w", encoding="utf-8") as f:
             _json.dump(session_summary, f, indent=2)
