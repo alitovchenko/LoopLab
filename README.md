@@ -4,7 +4,7 @@
 
 LoopLab is a research-grade orchestration framework that sits between streaming tools (LSL), online preprocessing, user-defined models, and adaptive task control. It is the coordinator of the closed loop, allowing you to ingest streams, process data, run a model, emit control signals, adapt the task, and log everything for replay and benchmarking.
 
-## Features (Phase 1)
+## Features
 
 - **LSL-based stream ingestion** with configurable stream selection and chunk size
 - **Ring buffer** with LSL-time–aligned samples
@@ -84,9 +84,9 @@ python -m looplab replay --log session.jsonl --stream session_stream.jsonl --see
 python -m looplab benchmark --log session.jsonl
 ```
 
-## Phase 1 proof run (canonical verification)
+## Proof run (canonical verification)
 
-Phase 1 is validated by a **proof run**: one command, no EEG hardware, synthetic LSL stream, full record → replay → divergence report → benchmark. Use it to verify the installation and that all completion criteria are met.
+A **proof run** verifies the pipeline end-to-end: one command, no EEG hardware, synthetic stream, full record → replay → divergence report → benchmark. Use it to verify the installation and that all completion criteria are met.
 
 ```bash
 python -m looplab proof-run
@@ -120,11 +120,23 @@ When LSL discovery fails (exit 2), `out_dir` may still contain `config_snapshot.
 
 **Methods-ready fields:** For reporting pipeline timing in methods, use `benchmark_summary.json`: `e2e_mean`, `e2e_stats` (mean, std, p50, p95), `intended_to_realized_mean`, `intended_to_realized_stats`, and per-stage `*_latency_stats` when benchmark hooks are enabled. Cite the pipeline version and `config_snapshot.json` for reproducibility.
 
-No hardware or config file required. Another developer can clone the repo, `pip install -e .`, and run this to confirm Phase 1 works end-to-end. For a PsychoPy task that produces the full artifact set in one run, see **`examples/psychopy_e2e/`**.
+No hardware or config file required. Another developer can clone the repo, `pip install -e .`, and run this to confirm the pipeline works end-to-end. For a PsychoPy task that produces the full artifact set in one run, see **`examples/psychopy_e2e/`**. For differentiated adaptive paradigms (difficulty control, model-based feedback), see **`examples/adaptive_difficulty_demo/`** and **`examples/model_feedback_demo/`**.
+
+## Examples
+
+| Example | Description |
+|--------|-------------|
+| `examples/closed_loop_demo/` | Minimal config-driven loop (identity model/policy); run via `proof-run` or `run --config`. |
+| `examples/adaptive_difficulty_demo/` | Pipeline drives task difficulty (easy/medium/hard); custom policy, full artifacts. |
+| `examples/model_feedback_demo/` | Model output drives feedback type (A/B); custom model and policy, full artifacts. |
+| `examples/psychopy_e2e/` | Real PsychoPy task in the same process as the pipeline; full artifact set. |
+| `examples/psychopy_simple_task/` | Minimal PsychoPy pattern: pop_pending, apply, report_realized. |
+| `examples/stress_replay/` | Replay with stream stressors (drop chunks, noise) for fault simulation. |
+| `examples/plugin_templates/` | Stub files for custom feature extractors, models, and policies. |
 
 ## Adding plugins
 
-You can add custom feature extractors, models, and policies without editing core code. Implement the protocol, register by name, and reference from config.
+You can add custom feature extractors, models, and policies without editing core code. Implement the protocol, register by name, and reference from config. Run **`looplab list`** (or `--features`, `--models`, `--policies`) to see registered plugins.
 
 - **Feature extractors:** Implement `FeatureExtractor` (e.g. `extract(data, t_start, t_end, context)`). Call `register_feature_extractor("myname", MyExtractor, {"param": default})`. In config set `feature_extractor: "myname"` and optionally `feature_extractor_config: {...}`.
 - **Models:** Implement `Model` and `register_model("myname", MyModel, default_config)`. Config: `model: "myname"`, `model_config: {...}`. See [model/base.py](src/looplab/model/base.py) and [model/example_models.py](src/looplab/model/example_models.py).
@@ -140,12 +152,12 @@ src/looplab/
   buffer/        # Ring buffer
   preprocess/    # Pipeline (detrend, zscore)
   features/      # Feature extractor protocol + simple implementation
-  model/         # Model protocol, registry, example identity model
+  model/         # Model protocol, registry, example + stress (faulty) models
   controller/    # ControlSignal, Policy, ControllerLoop
   task/          # TaskAdapter, PsychoPyTaskAdapter
   logging/       # Event schema, JSONL writer, EventLogger
-  benchmark/     # Hooks, latency report
-  replay/        # StreamRecorder, ReplayEngine, ReplayRunner
+  benchmark/     # Hooks, latency report, run summary
+  replay/        # StreamRecorder, ReplayEngine, ReplayRunner, stressors
   config/        # RunConfig, load_config
   runner.py      # create_runner
   __main__.py    # CLI: run, replay, benchmark, proof-run
@@ -169,7 +181,7 @@ Proof-run supports `--backend synthetic` (pure Python, no LSL) and `--backend ls
 
 Record the stream during the run with `record_stream_path` in config. Replay loads the event log and recorded chunks, feeds chunks into the buffer in order, and re-runs the same pipeline (preprocess, features, model, policy). Compare replayed control signals to the logged ones to verify determinism (fixed seed, no wall-clock in the pipeline).
 
-## Fault simulation (Workstream F)
+## Fault simulation
 
 LoopLab can simulate **missing chunks**, **noisy periods**, **drift**, **abrupt state changes**, **delayed or absent task acknowledgments**, and **invalid model outputs** for testing and documentation.
 
