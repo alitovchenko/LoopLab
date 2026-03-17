@@ -2,7 +2,7 @@
 
 **EEG-first, Python-native closed-loop experiment SDK** with LSL, PsychoPy, and deterministic replay.
 
-LoopLab is a research-grade orchestration framework that sits between streaming tools (LSL), online preprocessing, user-defined models, and adaptive task control. It is not a full BCI suite or a replacement for stimulus software—it coordinates the closed loop: ingest streams, process data, run a model, emit control signals, adapt the task, and log everything for replay and benchmarking.
+LoopLab is a research-grade orchestration framework that sits between streaming tools (LSL), online preprocessing, user-defined models, and adaptive task control. It is the coordinator of the closed loop, allowing you to ingest streams, process data, run a model, emit control signals, adapt the task, and log everything for replay and benchmarking.
 
 ## Features (Phase 1)
 
