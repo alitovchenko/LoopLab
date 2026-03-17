@@ -1,12 +1,23 @@
-"""Integration test: synthetic LSL stream -> pipeline -> control signals and log."""
+"""Integration test: synthetic LSL stream -> pipeline -> control signals and log.
+
+This test requires native LSL discovery and is skipped by default. Run it explicitly with:
+  RUN_LSL_TESTS=1 python -m pytest tests/test_integration_synthetic_lsl.py
+CI runs it only in a dedicated integration job (RUN_LSL_TESTS=1).
+"""
 
 import json
+import os
 import tempfile
 import time
 from pathlib import Path
 
-import numpy as np
 import pytest
+
+if os.environ.get("RUN_LSL_TESTS") != "1":
+    pytest.skip(
+        "LSL integration tests disabled (set RUN_LSL_TESTS=1 to run)",
+        allow_module_level=True,
+    )
 
 from looplab.buffer.ring_buffer import RingBuffer
 from looplab.controller.loop import ControllerLoop

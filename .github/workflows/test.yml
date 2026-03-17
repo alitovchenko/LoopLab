@@ -7,6 +7,8 @@ on:
     branches: [main]
 
 jobs:
+  # Default: unit tests, replay agreement, proof artifact structure, proof-run graceful failure.
+  # Does not set RUN_LSL_TESTS, so test_integration_synthetic_lsl.py is skipped.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -28,3 +30,30 @@ jobs:
 
       - name: Run tests
         run: .venv/bin/python -m pytest
+
+  # Optional: native LSL integration. Run only when explicitly enabled; allow failure so
+  # core contract is not blocked by upstream LSL instability.
+  test-lsl:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      RUN_LSL_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Create venv
+        run: python -m venv .venv
+
+      - name: Upgrade pip
+        run: .venv/bin/python -m pip install --upgrade pip
+
+      - name: Install package and dev dependencies
+        run: .venv/bin/python -m pip install -e .[dev]
+
+      - name: Run LSL integration tests
+        run: .venv/bin/python -m pytest tests/test_integration_synthetic_lsl.py -v
