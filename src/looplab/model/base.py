@@ -8,6 +8,7 @@ from typing import Any, Callable, Type
 import numpy as np
 
 from looplab.controller.signals import ModelOutput
+from looplab.exceptions import UnknownComponentError
 
 # Registry: name -> (class or factory, optional config)
 _MODEL_REGISTRY: dict[str, tuple[Type["Model"] | Callable[..., "Model"], dict[str, Any]]] = {}
@@ -42,7 +43,7 @@ def register_model(
 def create_model(name: str, config: dict[str, Any] | None = None) -> Model:
     """Instantiate a registered model by name with optional config overrides."""
     if name not in _MODEL_REGISTRY:
-        raise KeyError(f"Unknown model: {name}. Registered: {list(_MODEL_REGISTRY)}")
+        raise UnknownComponentError("model", name, list(_MODEL_REGISTRY))
     model_class, defaults = _MODEL_REGISTRY[name]
     opts = {**defaults, **(config or {})}
     if isinstance(model_class, type):

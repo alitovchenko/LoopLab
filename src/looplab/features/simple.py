@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from looplab.features.base import FeatureExtractor
+from looplab.features.base import FeatureExtractor, register_feature_extractor
 
 
 class SimpleFeatureExtractor(FeatureExtractor):
@@ -35,3 +35,6 @@ class SimpleFeatureExtractor(FeatureExtractor):
             var = data.var(axis=1)
             return np.concatenate([mean, var])
         return mean
+
+
+register_feature_extractor("simple", SimpleFeatureExtractor, {"use_variance": True})

@@ -36,6 +36,13 @@ class BenchmarkHooks:
     def record_pull_chunk(self, lsl_time: float | None = None) -> None:
         self.record("pull_chunk", lsl_time)
 
+    def record_window_ready(self, lsl_time: float | None = None) -> None:
+        self.record("window_ready", lsl_time)
+
+    def record_acquisition(self, lsl_time: float) -> None:
+        """Record acquisition time (e.g. window t_end) for acquisition-to-window latency."""
+        self.record("acquisition", lsl_time)
+
     def record_preprocess_done(self, lsl_time: float | None = None) -> None:
         self.record("preprocess_done", lsl_time)
 
@@ -47,6 +54,9 @@ class BenchmarkHooks:
 
     def record_policy_done(self, lsl_time: float | None = None) -> None:
         self.record("policy_done", lsl_time)
+
+    def record_task_dispatch(self, lsl_time: float | None = None) -> None:
+        self.record("task_dispatch", lsl_time)
 
     def record_intended(self, lsl_time: float | None = None) -> None:
         self.record("stimulus_intended", lsl_time)

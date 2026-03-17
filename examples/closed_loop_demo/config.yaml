@@ -1,0 +1,25 @@
+# Closed-loop demo config: synthetic-friendly (FakeEEG for proof-run) or replace with your stream name for live run.
+lsl:
+  name: "FakeEEG"
+  type: "EEG"
+  chunk_size: 8
+  max_buffered: 360.0
+  timeout: 5.0
+
+buffer:
+  max_samples: 500
+  n_channels: 2
+
+preprocess: "none"
+feature_extractor: "simple"
+feature_extractor_config: {}
+model: "identity"
+model_config: {}
+policy: "identity"
+policy_config:
+  validity_seconds: 1.0
+
+task_adapter: "psychopy"
+log_path: "closed_loop_demo_events.jsonl"
+record_stream_path: "closed_loop_demo_stream.jsonl"
+benchmark: true

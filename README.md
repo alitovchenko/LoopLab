@@ -100,6 +100,9 @@ Optional flags: `--duration 4` (seconds), `--out-dir proof_run_output`, `--seed 
 - Final line: `Proof-run: all checks passed.`
 - Exit code 0 means all checks passed; exit code 2 means LSL discovery failed (e.g. in a restricted environment).
 
+**Run report:** For any run (or proof-run output directory), generate a unified report:  
+`python -m looplab report --run-dir proof_run_output` or `--log session.jsonl`. Use `--human` for a one-page summary, or default JSON with event counts and timing (e2e, intended→realized, per-stage latencies and jitter when benchmark events are present).
+
 **Canonical proof artifact:** Proof-run writes a fixed set of files under `--out-dir` (e.g. `proof_run_output/`):
 
 | File | Contents |
@@ -110,10 +113,24 @@ Optional flags: `--duration 4` (seconds), `--out-dir proof_run_output`, `--seed 
 | `replay_result.json` | Replay outcome: `match_count`, `mismatch_count`, `total_logged`, `total_replayed`, `matches`, `divergences`. |
 | `benchmark_summary.json` | Latency report (e.g. e2e mean, intended→realized if present). |
 | `session_summary.json` | High-level summary: `duration_sec`, `seed`, `out_dir`, `artifacts_ok`, `replay_ok`, `lsl_available`, `timestamp`. |
+| `run_package_summary.json` | Run package summary: component versions, action/window counts, replay match status, benchmark readiness, warnings, config hash, backend. |
+| `RUN_SUMMARY.md` | One-page markdown report of the run package summary (same data as above). |
 
 When LSL discovery fails (exit 2), `out_dir` may still contain `config_snapshot.json` and a minimal `session_summary.json` with `lsl_available: false` and an `error` field.
 
-No hardware or config file required. Another developer can clone the repo, `pip install -e .`, and run this to confirm Phase 1 works end-to-end.
+**Methods-ready fields:** For reporting pipeline timing in methods, use `benchmark_summary.json`: `e2e_mean`, `e2e_stats` (mean, std, p50, p95), `intended_to_realized_mean`, `intended_to_realized_stats`, and per-stage `*_latency_stats` when benchmark hooks are enabled. Cite the pipeline version and `config_snapshot.json` for reproducibility.
+
+No hardware or config file required. Another developer can clone the repo, `pip install -e .`, and run this to confirm Phase 1 works end-to-end. For a PsychoPy task that produces the full artifact set in one run, see **`examples/psychopy_e2e/`**.
+
+## Adding plugins
+
+You can add custom feature extractors, models, and policies without editing core code. Implement the protocol, register by name, and reference from config.
+
+- **Feature extractors:** Implement `FeatureExtractor` (e.g. `extract(data, t_start, t_end, context)`). Call `register_feature_extractor("myname", MyExtractor, {"param": default})`. In config set `feature_extractor: "myname"` and optionally `feature_extractor_config: {...}`.
+- **Models:** Implement `Model` and `register_model("myname", MyModel, default_config)`. Config: `model: "myname"`, `model_config: {...}`. See [model/base.py](src/looplab/model/base.py) and [model/example_models.py](src/looplab/model/example_models.py).
+- **Policies:** Implement `Policy` and `register_policy("myname", MyPolicy, default_config)`. Config: `policy: "myname"`, `policy_config: {...}`.
+
+Register at import time (e.g. in your package’s `__init__.py` or before `create_runner`). The runner uses `create_feature_extractor`, `create_model`, and `create_policy` to build the pipeline from config.
 
 ## Project layout
 
@@ -136,17 +153,31 @@ src/looplab/
 
 ## PsychoPy integration
 
-Use `PsychoPyTaskAdapter`: the controller pushes `ControlSignal` objects into a thread-safe queue. Your PsychoPy script (same process or documented IPC) should:
+Use `PsychoPyTaskAdapter`: the controller pushes `ControlSignal` objects into a thread-safe queue. Your PsychoPy script (same process) should:
 
 1. At each frame or trial boundary, call `adapter.pop_pending()` to get the latest control signal.
 2. Apply the change (e.g. set condition, difficulty, stimulus).
 3. After `win.flip()`, call `adapter.report_realized(signal, lsl_clock())` so the logger records the realized event.
 
-See `examples/psychopy_simple_task/` for a minimal pattern.
+The full **PsychoPy integration contract** (who creates the adapter, when to call `pop_pending`, meaning of `report_realized`, how to obtain `lsl_clock`) is in [docs/psychopy_integration.md](docs/psychopy_integration.md). See `examples/psychopy_simple_task/` for a minimal runnable pattern and `examples/closed_loop_demo/` for a config-based proof-run style reference.
+
+## Synthetic vs live parity
+
+Proof-run supports `--backend synthetic` (pure Python, no LSL) and `--backend lsl`. Both use the same `ControllerLoop` and produce the **same canonical artifact layout** (config_snapshot, events, stream, replay_result, benchmark_summary, session_summary) and the same report key structure. Developing and testing against synthetic is therefore valid for live runs; the only difference is the data source (in-process generator vs LSL discovery). Replay uses “one pipeline run per chunk”; synthetic proof-run ticks once per chunk to match.
 
 ## Deterministic replay
 
 Record the stream during the run with `record_stream_path` in config. Replay loads the event log and recorded chunks, feeds chunks into the buffer in order, and re-runs the same pipeline (preprocess, features, model, policy). Compare replayed control signals to the logged ones to verify determinism (fixed seed, no wall-clock in the pipeline).
+
+## Fault simulation (Workstream F)
+
+LoopLab can simulate **missing chunks**, **noisy periods**, **drift**, **abrupt state changes**, **delayed or absent task acknowledgments**, and **invalid model outputs** for testing and documentation.
+
+- **Stream stressors** ([looplab.replay.stressors](src/looplab/replay/stressors.py)): `drop_chunks`, `drop_chunks_by_index`, `drop_chunks_in_interval`, `add_noise`, `add_drift`, `add_abrupt_change` operate on chunk lists; use with replay to see divergence when data is missing or corrupted.
+- **Event stressors**: `delay_realized_events`, `drop_realized_events`, `drop_realized_in_interval` modify event lists so benchmark report sees delayed or absent realized events.
+- **Faulty model** ([looplab.model.stress_models](src/looplab/model/stress_models.py)): register as `"faulty"`; with configurable probability returns NaN/Inf so policy and pipeline behavior can be tested. Invalid model output is not sanitized; policies may need to handle NaN/Inf.
+
+Example: `examples/stress_replay/run_stress_replay.py` runs replay with optional `--drop-ratio` and `--noise-scale`. Run tests with `pytest tests/test_replay_stressors.py`.
 
 ## License
 

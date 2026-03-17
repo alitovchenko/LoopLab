@@ -1,11 +1,16 @@
-"""Feature extractor protocol: window -> feature vector."""
+"""Feature extractor protocol and registry for plug-in extractors."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Callable, Type
 
 import numpy as np
+
+from looplab.exceptions import UnknownComponentError
+
+# Registry: name -> (class or factory, optional default config)
+_FEATURE_EXTRACTOR_REGISTRY: dict[str, tuple[Type["FeatureExtractor"] | Callable[..., "FeatureExtractor"], dict[str, Any]]] = {}
 
 
 class FeatureExtractor(ABC):
@@ -25,3 +30,27 @@ class FeatureExtractor(ABC):
         Returns 1D array or dict of named arrays.
         """
         ...
+
+
+def get_feature_extractor_registry() -> dict[str, tuple[Type[FeatureExtractor] | Callable[..., FeatureExtractor], dict[str, Any]]]:
+    return _FEATURE_EXTRACTOR_REGISTRY.copy()
+
+
+def register_feature_extractor(
+    name: str,
+    extractor_class: Type[FeatureExtractor] | Callable[..., FeatureExtractor],
+    default_config: dict[str, Any] | None = None,
+) -> None:
+    """Register a feature extractor by name for config-based lookup."""
+    _FEATURE_EXTRACTOR_REGISTRY[name] = (extractor_class, default_config or {})
+
+
+def create_feature_extractor(name: str, config: dict[str, Any] | None = None) -> FeatureExtractor:
+    """Instantiate a registered feature extractor by name with optional config overrides."""
+    if name not in _FEATURE_EXTRACTOR_REGISTRY:
+        raise UnknownComponentError("feature_extractor", name, list(_FEATURE_EXTRACTOR_REGISTRY))
+    extractor_class, defaults = _FEATURE_EXTRACTOR_REGISTRY[name]
+    opts = {**defaults, **(config or {})}
+    if isinstance(extractor_class, type):
+        return extractor_class(**opts)
+    return extractor_class(**opts)

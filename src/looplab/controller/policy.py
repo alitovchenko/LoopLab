@@ -1,12 +1,16 @@
-"""Policy: model output -> control signal."""
+"""Policy: model output -> control signal; registry for plug-in policies."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Callable, Type
 
 from looplab.controller.signals import ControlSignal, ModelOutput
+from looplab.exceptions import UnknownComponentError
 from looplab.streams.clock import lsl_clock
+
+# Registry: name -> (class or factory, optional default config)
+_POLICY_REGISTRY: dict[str, tuple[Type["Policy"] | Callable[..., "Policy"], dict[str, Any]]] = {}
 
 
 class Policy(ABC):
@@ -19,6 +23,30 @@ class Policy(ABC):
         context: dict[str, Any],
     ) -> ControlSignal:
         ...
+
+
+def get_policy_registry() -> dict[str, tuple[Type[Policy] | Callable[..., Policy], dict[str, Any]]]:
+    return _POLICY_REGISTRY.copy()
+
+
+def register_policy(
+    name: str,
+    policy_class: Type[Policy] | Callable[..., Policy],
+    default_config: dict[str, Any] | None = None,
+) -> None:
+    """Register a policy by name for config-based lookup."""
+    _POLICY_REGISTRY[name] = (policy_class, default_config or {})
+
+
+def create_policy(name: str, config: dict[str, Any] | None = None) -> Policy:
+    """Instantiate a registered policy by name with optional config overrides."""
+    if name not in _POLICY_REGISTRY:
+        raise UnknownComponentError("policy", name, list(_POLICY_REGISTRY))
+    policy_class, defaults = _POLICY_REGISTRY[name]
+    opts = {**defaults, **(config or {})}
+    if isinstance(policy_class, type):
+        return policy_class(**opts)
+    return policy_class(**opts)
 
 
 class IdentityPolicy(Policy):
@@ -38,3 +66,6 @@ class IdentityPolicy(Policy):
             params={"value": model_output.value},
             valid_until_lsl_time=now + self._validity_seconds,
         )
+
+
+register_policy("identity", IdentityPolicy, {"validity_seconds": 1.0})

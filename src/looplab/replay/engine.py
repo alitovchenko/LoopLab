@@ -58,3 +58,11 @@ class ReplayEngine:
 
     def get_chunks(self) -> list[tuple[Any, list[float]]]:
         return list(self._chunks)
+
+    def set_chunks(self, chunks: list[tuple[Any, list[float]]]) -> None:
+        """Set chunks from memory (e.g. after applying stressors). Overwrites any loaded from stream_path."""
+        self._chunks = list(chunks)
+
+    def set_events(self, events: list[LogEvent]) -> None:
+        """Set events from memory. Overwrites any loaded from log_path."""
+        self._events = list(events)

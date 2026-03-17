@@ -31,6 +31,7 @@ class RunConfig:
     buffer: BufferConfig = field(default_factory=BufferConfig)
     preprocess: str = "none"
     feature_extractor: str = "simple"
+    feature_extractor_config: dict[str, Any] = field(default_factory=dict)
     model: str = "identity"
     model_config: dict[str, Any] = field(default_factory=dict)
     policy: str = "identity"
@@ -82,6 +83,7 @@ def _dict_to_config(d: dict[str, Any]) -> RunConfig:
         ),
         preprocess=d.get("preprocess", "none"),
         feature_extractor=d.get("feature_extractor", "simple"),
+        feature_extractor_config=d.get("feature_extractor_config", {}),
         model=d.get("model", "identity"),
         model_config=d.get("model_config", {}),
         policy=d.get("policy", "identity"),

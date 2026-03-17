@@ -33,6 +33,24 @@ def main() -> None:
     proof_p.add_argument("--seed", type=int, default=42, help="Random seed for replay (default 42)")
     proof_p.add_argument("--strict", action="store_true", help="Exit with code 1 if replay diverges from log")
 
+    report_p = sub.add_parser("report", help="Unified run report from log or run directory")
+    report_p.add_argument("--log", help="Event log JSONL path")
+    report_p.add_argument("--run-dir", help="Run directory (expects events.jsonl, optional benchmark_summary.json)")
+    report_p.add_argument("--human", action="store_true", help="Print only human-readable one-page summary")
+    report_p.add_argument("--json", action="store_true", help="Print JSON run report (default if no --human)")
+    report_p.add_argument("--write", action="store_true", help="Write run_package_summary.json and RUN_SUMMARY.md into --run-dir")
+
+    list_p = sub.add_parser("list", help="List registered feature extractors, models, and policies")
+    list_p.add_argument("--features", action="store_true", help="List only feature extractors")
+    list_p.add_argument("--models", action="store_true", help="List only models")
+    list_p.add_argument("--policies", action="store_true", help="List only policies")
+    list_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    new_p = sub.add_parser("new", help="Generate a starter plugin file (feature, model, or policy)")
+    new_p.add_argument("kind", choices=["feature", "model", "policy"], help="Plugin type")
+    new_p.add_argument("name", help="Plugin name (used for registration and file name)")
+    new_p.add_argument("--out-dir", type=str, default=".", help="Directory to write the file (default: current)")
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -78,11 +96,7 @@ def main() -> None:
                         recorder.record(data, timestamps)
                 now = lsl_clock()
                 if now >= next_tick:
-                    if hooks:
-                        hooks.record_preprocess_done(now)
-                    c = loop.tick()
-                    if hooks and c:
-                        hooks.record_policy_done(now)
+                    loop.tick()
                     next_tick = now + tick_interval
         finally:
             client.close()
@@ -97,9 +111,9 @@ def main() -> None:
         from looplab.replay.divergence import compute_divergence, format_divergence_report
         from looplab.buffer.ring_buffer import RingBuffer
         from looplab.preprocess.pipeline import noop_preprocess
-        from looplab.features.simple import SimpleFeatureExtractor
+        from looplab.features.base import create_feature_extractor
         from looplab.model.base import create_model
-        from looplab.controller.policy import IdentityPolicy
+        from looplab.controller.policy import create_policy
 
         engine = ReplayEngine(args.log, args.stream)
         engine.load()
@@ -113,12 +127,12 @@ def main() -> None:
             n_samples, n_channels = chunks[0][0].shape[0], chunks[0][0].shape[1]
             buffer = RingBuffer(max_samples=n_samples * 10, n_channels=n_channels)
             model = create_model("identity", {})
-            policy = IdentityPolicy()
+            policy = create_policy("identity", {})
             runner = ReplayRunner(
                 engine,
                 buffer,
                 noop_preprocess,
-                SimpleFeatureExtractor(),
+                create_feature_extractor("simple", {}),
                 model,
                 policy,
             )
@@ -164,9 +178,9 @@ def main() -> None:
         from looplab.replay.stream_recorder import StreamRecorder
         from looplab.buffer.ring_buffer import RingBuffer
         from looplab.preprocess.pipeline import noop_preprocess
-        from looplab.features.simple import SimpleFeatureExtractor
+        from looplab.features.base import create_feature_extractor
         from looplab.model.base import create_model
-        from looplab.controller.policy import IdentityPolicy
+        from looplab.controller.policy import create_policy
         from looplab.logging.schema import LogEvent
         from looplab.benchmark.report import latency_report, format_report_human
 
@@ -221,6 +235,8 @@ def main() -> None:
             buffer = components["buffer"]
             writer = components["writer"]
             hooks = components.get("hooks")
+            if hooks:
+                loop.set_hooks(hooks)
             recorder = components.get("recorder")
             writer.open()
             if recorder:
@@ -247,12 +263,7 @@ def main() -> None:
                         hooks.record_pull_chunk(lsl_clock())
                     if recorder:
                         recorder.record(data, timestamps)
-                    now = lsl_clock()
-                    if hooks:
-                        hooks.record_preprocess_done(now)
-                    c = loop.tick()
-                    if hooks and c:
-                        hooks.record_policy_done(now)
+                    loop.tick()
                     _time.sleep(chunk_interval)
             finally:
                 writer.close()
@@ -311,11 +322,7 @@ def main() -> None:
                             recorder.record(data, timestamps)
                     now = lsl_clock()
                     if now >= next_tick:
-                        if hooks:
-                            hooks.record_preprocess_done(now)
-                        c = loop.tick()
-                        if hooks and c:
-                            hooks.record_policy_done(now)
+                        loop.tick()
                         next_tick = now + tick_interval
             finally:
                 client.close()
@@ -345,7 +352,7 @@ def main() -> None:
             r_buffer = RingBuffer(max_samples=500, n_channels=2)
             runner = ReplayRunner(
                 engine, r_buffer, noop_preprocess,
-                SimpleFeatureExtractor(), create_model("identity", {}), IdentityPolicy(),
+                create_feature_extractor("simple", {}), create_model("identity", {}), create_policy("identity", {}),
             )
             replayed = runner.run(seed=args.seed)
             report = compute_divergence(logged, replayed)
@@ -357,13 +364,16 @@ def main() -> None:
 
         # Benchmark
         points = []
+        event_counts = {}
         with open(log_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 ev = LogEvent.from_dict(_json.loads(line))
-                if getattr(ev.event_type, "value", ev.event_type) == "benchmark_latency":
+                t = getattr(ev.event_type, "value", ev.event_type)
+                event_counts[t] = event_counts.get(t, 0) + 1
+                if t == "benchmark_latency":
                     points.append((ev.payload.get("label", "?"), ev.lsl_time))
         bench_report = latency_report(points)
         print(format_report_human(bench_report), file=sys.stderr)
@@ -385,12 +395,264 @@ def main() -> None:
         }
         with open(out_dir / "session_summary.json", "w", encoding="utf-8") as f:
             _json.dump(session_summary, f, indent=2)
+
+        # Run package summary and markdown
+        run_warnings = []
+        if not points:
+            run_warnings.append("no_benchmark_events")
+        if not chunks:
+            run_warnings.append("replay_skipped_no_chunks")
+        from looplab.benchmark.run_summary import build_run_package_summary, format_run_summary_markdown
+        config_snap = _json.loads((out_dir / "config_snapshot.json").read_text(encoding="utf-8"))
+        run_package_summary = build_run_package_summary(
+            event_counts,
+            bench_report,
+            run_dir=out_dir,
+            session_summary=session_summary,
+            replay_result=replay_result,
+            config_snapshot=config_snap,
+            backend=backend,
+            warnings=run_warnings,
+        )
+        with open(out_dir / "run_package_summary.json", "w", encoding="utf-8") as f:
+            _json.dump(run_package_summary, f, indent=2)
+        with open(out_dir / "RUN_SUMMARY.md", "w", encoding="utf-8") as f:
+            f.write(format_run_summary_markdown(run_package_summary))
+
         if not artifacts_ok:
             print("Proof-run: artifact check failed (log or stream missing/empty).", file=sys.stderr)
             sys.exit(1)
         if not replay_ok:
             sys.exit(1)
         print("Proof-run: all checks passed.", file=sys.stderr)
+
+    elif args.command == "report":
+        import json as _json
+        from pathlib import Path as _Path
+        from looplab.logging.schema import LogEvent
+        from looplab.benchmark.report import latency_report, format_report_human
+
+        run_dir = _Path(args.run_dir) if getattr(args, "run_dir", None) else None
+        log_path = getattr(args, "log", None)
+        if run_dir and run_dir.is_dir():
+            log_path = str(run_dir / "events.jsonl")
+        if not log_path or not _Path(log_path).exists():
+            print("report: provide --log <path> or --run-dir <dir> with events.jsonl", file=sys.stderr)
+            sys.exit(1)
+        path = _Path(log_path)
+
+        events = []
+        points = []
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                ev = LogEvent.from_dict(_json.loads(line))
+                events.append(ev)
+                if getattr(ev.event_type, "value", ev.event_type) == "benchmark_latency":
+                    points.append((ev.payload.get("label", "?"), ev.lsl_time))
+
+        by_type = {}
+        for e in events:
+            t = getattr(e.event_type, "value", e.event_type)
+            by_type[t] = by_type.get(t, 0) + 1
+
+        bench = latency_report(points)
+        report = {
+            "log_path": str(path),
+            "event_counts": by_type,
+            "n_events": len(events),
+            "benchmark": bench,
+        }
+        if run_dir:
+            session_file = run_dir / "session_summary.json"
+            if session_file.exists():
+                with open(session_file, encoding="utf-8") as f:
+                    report["session_summary"] = _json.load(f)
+            for name in ("replay_result.json", "config_snapshot.json"):
+                p = run_dir / name
+                if p.exists():
+                    report[name.replace(".json", "_path")] = str(p)
+
+        report_warnings = []
+        if not points:
+            report_warnings.append("no_benchmark_events")
+        from looplab.benchmark.run_summary import build_run_package_summary, format_run_summary_markdown
+        run_package_summary = build_run_package_summary(
+            report["event_counts"],
+            bench,
+            run_dir=run_dir,
+            session_summary=report.get("session_summary"),
+            warnings=report_warnings,
+        )
+        report["run_package_summary"] = run_package_summary
+        if run_dir and getattr(args, "write", False):
+            with open(run_dir / "run_package_summary.json", "w", encoding="utf-8") as f:
+                _json.dump(run_package_summary, f, indent=2)
+            with open(run_dir / "RUN_SUMMARY.md", "w", encoding="utf-8") as f:
+                f.write(format_run_summary_markdown(run_package_summary))
+
+        if getattr(args, "human", False):
+            lines = [
+                f"Run report: {report['log_path']}",
+                f"  Events: {report['n_events']} total",
+                "  By type: " + ", ".join(f"{k}={v}" for k, v in sorted(report["event_counts"].items())),
+                "",
+                format_report_human(bench),
+                "",
+                format_run_summary_markdown(run_package_summary),
+            ]
+            print("\n".join(lines))
+        else:
+            print(_json.dumps(report, indent=2))
+
+    elif args.command == "new":
+        out_dir = Path(getattr(args, "out_dir", "."))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        kind = getattr(args, "kind")
+        name = getattr(args, "name")
+        class_name = "".join(p.capitalize() for p in name.replace("-", "_").split("_"))
+        if kind == "feature":
+            content = f'''"""Custom feature extractor: {name}. Implement extract() and reference as feature_extractor: {name!r} in config."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+
+from looplab.features.base import FeatureExtractor, register_feature_extractor
+
+
+class {class_name}(FeatureExtractor):
+    def __init__(self, use_variance: bool = True):
+        self._use_variance = use_variance
+
+    def extract(
+        self,
+        data: np.ndarray,
+        t_start: float,
+        t_end: float,
+        context: dict[str, Any] | None = None,
+    ) -> np.ndarray | dict[str, np.ndarray]:
+        data = np.asarray(data, dtype=np.float64)
+        # TODO: your implementation
+        return data.mean(axis=1)
+
+
+register_feature_extractor({name!r}, {class_name}, {{"use_variance": True}})
+'''
+        elif kind == "model":
+            content = f'''"""Custom model: {name}. Implement run() and reference as model: {name!r} in config."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+
+from looplab.controller.signals import ModelOutput
+from looplab.model.base import Model, register_model
+
+
+class {class_name}(Model):
+    def run(
+        self,
+        features: np.ndarray,
+        context: dict[str, Any] | None = None,
+    ) -> ModelOutput:
+        # TODO: your implementation
+        f = np.asarray(features).ravel()
+        return ModelOutput(value=float(np.mean(f)), confidence=1.0)
+
+
+register_model({name!r}, {class_name}, {{}})
+'''
+        else:  # policy
+            content = f'''"""Custom policy: {name}. Implement __call__() and reference as policy: {name!r} in config."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from looplab.controller.signals import ControlSignal, ModelOutput
+from looplab.controller.policy import Policy, register_policy
+from looplab.streams.clock import lsl_clock
+
+
+class {class_name}(Policy):
+    def __init__(self, validity_seconds: float = 1.0):
+        self._validity_seconds = validity_seconds
+
+    def __call__(
+        self,
+        model_output: ModelOutput,
+        context: dict[str, Any],
+    ) -> ControlSignal:
+        now = lsl_clock()
+        # TODO: your implementation
+        return ControlSignal(
+            action="set_value",
+            params={{"value": model_output.value}},
+            valid_until_lsl_time=now + self._validity_seconds,
+        )
+
+
+register_policy({name!r}, {class_name}, {{"validity_seconds": 1.0}})
+'''
+        path = out_dir / f"{name}.py"
+        path.write_text(content, encoding="utf-8")
+        print(f"Wrote {path}", file=sys.stderr)
+
+    elif args.command == "list":
+        import json as _json
+        # Ensure built-ins are registered
+        import looplab.model.example_models  # noqa: F401
+        import looplab.features.simple  # noqa: F401
+        import looplab.controller.policy  # noqa: F401
+        from looplab.features.base import get_feature_extractor_registry
+        from looplab.model.base import get_model_registry
+        from looplab.controller.policy import get_policy_registry
+
+        show_all = not (getattr(args, "features", False) or getattr(args, "models", False) or getattr(args, "policies", False))
+        out = {}
+        if getattr(args, "json", False):
+            if show_all or getattr(args, "features", False):
+                fe = get_feature_extractor_registry()
+                out["features"] = {name: list(defaults) for name, (_, defaults) in fe.items()}
+            if show_all or getattr(args, "models", False):
+                mo = get_model_registry()
+                out["models"] = {name: list(defaults) for name, (_, defaults) in mo.items()}
+            if show_all or getattr(args, "policies", False):
+                po = get_policy_registry()
+                out["policies"] = {name: list(defaults) for name, (_, defaults) in po.items()}
+            print(_json.dumps(out, indent=2))
+        else:
+            lines = []
+            if show_all or getattr(args, "features", False):
+                fe = get_feature_extractor_registry()
+                lines.append("Feature extractors:")
+                for name, (_, defaults) in sorted(fe.items()):
+                    keys = list(defaults) if defaults else []
+                    lines.append(f"  {name}" + (f"  (default config keys: {', '.join(keys)})" if keys else ""))
+                lines.append("")
+            if show_all or getattr(args, "models", False):
+                mo = get_model_registry()
+                lines.append("Models:")
+                for name, (_, defaults) in sorted(mo.items()):
+                    keys = list(defaults) if defaults else []
+                    lines.append(f"  {name}" + (f"  (default config keys: {', '.join(keys)})" if keys else ""))
+                lines.append("")
+            if show_all or getattr(args, "policies", False):
+                po = get_policy_registry()
+                lines.append("Policies:")
+                for name, (_, defaults) in sorted(po.items()):
+                    keys = list(defaults) if defaults else []
+                    lines.append(f"  {name}" + (f"  (default config keys: {', '.join(keys)})" if keys else ""))
+            if lines and lines[-1] == "":
+                lines.pop()
+            print("\n".join(lines))
 
     else:
         parser.print_help()

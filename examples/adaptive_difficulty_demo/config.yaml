@@ -1,0 +1,29 @@
+# Adaptive difficulty demo: pipeline output drives task difficulty (easy/medium/hard).
+# log_path and record_stream_path are overridden by run_demo.py to out_dir.
+
+lsl:
+  name: "FakeEEG"
+  type: "EEG"
+  chunk_size: 8
+  max_buffered: 360.0
+  timeout: 5.0
+
+buffer:
+  max_samples: 500
+  n_channels: 2
+
+preprocess: "none"
+feature_extractor: "simple"
+feature_extractor_config: {}
+model: "identity"
+model_config: {}
+policy: "adaptive_difficulty"
+policy_config:
+  validity_seconds: 1.0
+  threshold_low: -0.3
+  threshold_high: 0.3
+
+task_adapter: "psychopy"
+log_path: "adaptive_difficulty_events.jsonl"
+record_stream_path: "adaptive_difficulty_stream.jsonl"
+benchmark: true

@@ -42,9 +42,14 @@ class ControllerLoop:
         self._adapter = adapter
         self._logger = logger
         self._min_samples = min_samples
+        self._hooks: Any = None
 
     def set_logger(self, logger: "EventLogger") -> None:
         self._logger = logger
+
+    def set_hooks(self, hooks: Any) -> None:
+        """Set optional benchmark hooks for per-stage timing."""
+        self._hooks = hooks
 
     def tick(self, context: dict[str, Any] | None = None) -> ControlSignal | None:
         """
@@ -57,8 +62,15 @@ class ControllerLoop:
         t_start = float(times[0]) if len(times) else 0.0
         t_end = float(times[-1]) if len(times) else 0.0
 
+        now = lsl_clock()
+        if self._hooks:
+            self._hooks.record_window_ready(now)
+            self._hooks.record_acquisition(t_end)
+
         # Preprocess: (n_samples, n_channels) -> same shape expected by feature extractor
         preprocessed = self._preprocess(data)
+        if self._hooks:
+            self._hooks.record_preprocess_done(lsl_clock())
         if preprocessed.ndim == 2 and preprocessed.shape[0] > preprocessed.shape[1]:
             # Feature extractor expects (n_channels, n_times)
             preprocessed = preprocessed.T
@@ -68,6 +80,8 @@ class ControllerLoop:
         ctx["t_end"] = t_end
 
         features = self._feature_extractor.extract(preprocessed, t_start, t_end, ctx)
+        if self._hooks:
+            self._hooks.record_features_done(lsl_clock())
         if isinstance(features, dict):
             features = features.get("features", list(features.values())[0] if features else None)
         if features is None:
@@ -77,7 +91,11 @@ class ControllerLoop:
 
         now = lsl_clock()
         model_output = self._model.run(features_arr, ctx)
+        if self._hooks:
+            self._hooks.record_model_done(lsl_clock())
         control = self._policy(model_output, ctx)
+        if self._hooks:
+            self._hooks.record_policy_done(lsl_clock())
 
         if self._logger:
             self._logger.log_features(now, list(features_arr.shape))
@@ -94,5 +112,7 @@ class ControllerLoop:
             self._adapter.push(control)
         elif callable(getattr(self._adapter, "receive", None)):
             self._adapter.receive(control)
+        if self._hooks:
+            self._hooks.record_task_dispatch(lsl_clock())
 
         return control
