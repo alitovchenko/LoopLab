@@ -162,6 +162,8 @@ def build_run_report(run_dir: Path | str) -> dict[str, Any]:
         },
         "looplab_version": looplab_ver,
     }
+    if session.get("lsl_support_tier") is not None:
+        methods["lsl_support_tier"] = session.get("lsl_support_tier")
 
     experiment_summary = {
         "trial_start": event_counts.get("trial_start", 0),
@@ -301,6 +303,11 @@ def format_run_report_markdown(report: dict[str, Any]) -> str:
     lines.append("## Methods (citable)")
     lines.append(f"- **LoopLab version:** {m.get('looplab_version', 'n/a')}")
     lines.append(f"- **Backend:** {m.get('backend', 'n/a')}")
+    if m.get("lsl_support_tier"):
+        lines.append(
+            f"- **LSL support tier (this run):** `{m.get('lsl_support_tier')}` "
+            f"— see LSL matrix for policy vs artifact labels"
+        )
     lines.append(f"- **Duration (s):** {m.get('duration_sec', 'n/a')}")
     lines.append(f"- **Window size (samples / chunk):** {m.get('window_size_samples', 'n/a')}")
     lines.append(f"- **Buffer max samples:** {m.get('buffer_max_samples', 'n/a')}")

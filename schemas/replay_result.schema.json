@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "replay_result",
+  "description": "LoopLab 0.3.x replay_result.json from compute_divergence or stub.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "match_count": { "type": "integer", "minimum": 0 },
+    "mismatch_count": { "type": "integer", "minimum": 0 },
+    "total_logged": { "type": "integer", "minimum": 0 },
+    "total_replayed": { "type": "integer", "minimum": 0 },
+    "matches": { "type": "boolean" },
+    "divergences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "index": { "type": "integer" },
+          "logged": {},
+          "replayed": {}
+        },
+        "required": ["index", "logged", "replayed"]
+      }
+    }
+  },
+  "required": [
+    "match_count",
+    "mismatch_count",
+    "total_logged",
+    "total_replayed",
+    "matches",
+    "divergences"
+  ]
+}

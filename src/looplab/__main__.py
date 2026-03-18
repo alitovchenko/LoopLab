@@ -71,6 +71,12 @@ def main() -> None:
     vc_p.add_argument("--strict", action="store_true", help="Treat unrecognized preprocess as error")
     vc_p.add_argument("--json", action="store_true", help="Print result as JSON")
 
+    check_lsl_p = sub.add_parser(
+        "check-lsl",
+        help="Probe native LSL discovery (see docs/deployment/lsl_compatibility_matrix.md)",
+    )
+    check_lsl_p.add_argument("--json", action="store_true", help="Machine-readable result and exit code")
+
     new_p = sub.add_parser("new", help="Generate a starter plugin file (feature, model, or policy)")
     new_p.add_argument("kind", choices=["feature", "model", "policy"], help="Plugin type")
     new_p.add_argument("name", help="Plugin name (used for registration and file name)")
@@ -363,6 +369,7 @@ def main() -> None:
                     print("Proof-run skipped: LSL stream discovery failed (e.g. network/sandbox).", file=sys.stderr)
                     session_fail = {
                         "lsl_available": False,
+                        "lsl_support_tier": "native_lsl_unavailable",
                         "error": "LSL stream discovery failed (e.g. network/sandbox)",
                         "out_dir": str(out_dir),
                     }
@@ -463,6 +470,9 @@ def main() -> None:
             "artifacts_ok": artifacts_ok,
             "replay_ok": replay_ok,
             "lsl_available": (backend == "lsl"),
+            "lsl_support_tier": (
+                "native_lsl_functional" if backend == "lsl" else "synthetic_supported"
+            ),
             "backend": backend,
             "timestamp": _datetime.now(_timezone.utc).isoformat().replace("+00:00", "Z"),
         }
@@ -756,6 +766,28 @@ register_policy({name!r}, {class_name}, {{"validity_seconds": 1.0}})
             else:
                 print("Validation failed.", file=sys.stderr)
         sys.exit(0 if result.get("ok") else 1)
+
+    elif args.command == "check-lsl":
+        import json as _json
+
+        from looplab.streams.lsl_support import (
+            LSL_MATRIX_BLURB,
+            build_check_lsl_json_report,
+            check_lsl_exit_code,
+            check_lsl_human_message,
+            probe_native_lsl_discovery,
+        )
+
+        r = probe_native_lsl_discovery()
+        if getattr(args, "json", False):
+            print(_json.dumps(build_check_lsl_json_report(r), indent=2))
+        else:
+            print(LSL_MATRIX_BLURB, file=sys.stderr)
+            print("", file=sys.stderr)
+            print(check_lsl_human_message(r), file=sys.stderr)
+            if r.get("error") and not r.get("discovery_ok") and r.get("pylsl_available"):
+                print(f"  ({r['error']})", file=sys.stderr)
+        sys.exit(check_lsl_exit_code(r))
 
     elif args.command == "list-components":
         import json as _json

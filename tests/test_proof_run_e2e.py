@@ -69,6 +69,7 @@ def test_proof_run_e2e():
         assert session.get("artifacts_ok") is True, "artifacts_ok should be true on success"
         assert session.get("replay_ok") is True, "replay_ok should be true on success"
         assert "run_health" in session, "session_summary should include run_health"
+        assert session.get("lsl_support_tier") == "synthetic_supported"
         assert (out / "diagnostics.json").exists(), "diagnostics.json should exist"
 
         with open(out / "replay_result.json", encoding="utf-8") as f:
@@ -84,7 +85,17 @@ def test_proof_run_e2e():
 
 
 # Expected keys so artifact/report consumers can assume one structure regardless of backend (synthetic or LSL).
-SESSION_SUMMARY_KEYS = {"duration_sec", "seed", "out_dir", "artifacts_ok", "replay_ok", "lsl_available", "timestamp", "backend"}
+SESSION_SUMMARY_KEYS = {
+    "duration_sec",
+    "seed",
+    "out_dir",
+    "artifacts_ok",
+    "replay_ok",
+    "lsl_available",
+    "lsl_support_tier",
+    "timestamp",
+    "backend",
+}
 BENCHMARK_SUMMARY_KEYS = {"by_label"}  # at least; may have e2e_mean, e2e_stats, intended_to_realized_*, etc.
 RUN_PACKAGE_SUMMARY_KEYS = {
     "component_versions", "action_counts", "window_count", "replay_match_status",

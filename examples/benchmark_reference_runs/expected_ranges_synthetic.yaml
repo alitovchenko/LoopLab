@@ -1,0 +1,27 @@
+# Indicative ranges for sanity checks — NOT contractual SLOs.
+# Machine, Python version, and load affect numbers. See docs/benchmarking.md.
+
+synthetic_baseline:
+  description: "proof-run --backend synthetic, identity pipeline, ~3–4 s duration"
+  e2e_p95_seconds:
+    typical_max: 0.005
+    generous_max: 0.020   # CI / slow VM
+  e2e_mean_seconds:
+    typical: [0.0002, 0.003]
+  per_stage_p95_seconds:
+    typical_max: 0.002   # preprocess, features, model, policy, task_dispatch each
+
+synthetic_degraded:
+  description: "synthetic_scenario config with irregular timing, noise, ack delay"
+  e2e_p95_seconds:
+    generous_max: 0.025
+  note: "E2E may resemble baseline; acquisition_to_window often misleading — do not cite without validation"
+
+psychopy_e2e:
+  description: "Real flip + report_realized"
+  intended_to_realized_p95_seconds:
+    typical_max: 0.050   # display + scheduler; lab-dependent
+  note: "Populate summary_stats by running run_demo.py; IT→R dominates task-visible latency"
+
+native_lsl:
+  note: "E2E distribution widens with device timing; cite run_report effective_windows_per_sec"

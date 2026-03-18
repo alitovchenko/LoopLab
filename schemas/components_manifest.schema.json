@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "components_manifest",
+  "description": "LoopLab 0.3.x components_manifest.json from build_components_manifest.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "looplab_version": { "type": "string" },
+    "feature_extractor": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "registered": { "type": "boolean" },
+        "class": { "type": "string" },
+        "default_config": { "type": "object", "additionalProperties": true },
+        "effective_config": { "type": "object", "additionalProperties": true },
+        "component_version": {}
+      },
+      "required": ["name", "registered"]
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "registered": { "type": "boolean" }
+      },
+      "required": ["name", "registered"]
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "registered": { "type": "boolean" }
+      },
+      "required": ["name", "registered"]
+    }
+  },
+  "required": ["looplab_version", "feature_extractor", "model", "policy"]
+}

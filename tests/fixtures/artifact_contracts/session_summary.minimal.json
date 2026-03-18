@@ -1,0 +1,15 @@
+{
+  "duration_sec": 2.0,
+  "seed": 42,
+  "out_dir": "/tmp/run",
+  "artifacts_ok": true,
+  "replay_ok": true,
+  "lsl_available": false,
+  "lsl_support_tier": "synthetic_supported",
+  "backend": "synthetic",
+  "timestamp": "2025-01-01T00:00:00Z",
+  "run_health": "healthy",
+  "diagnostics_summary": "healthy: 0 finding(s)",
+  "diagnostic_findings": [],
+  "warning_messages": []
+}

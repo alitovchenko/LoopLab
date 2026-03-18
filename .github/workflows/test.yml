@@ -64,3 +64,6 @@ jobs:
 
       - name: Proof-run with LSL backend
         run: .venv/bin/python -m looplab proof-run --backend lsl --duration 2 --out-dir proof_run_lsl
+
+      - name: check-lsl probe (monitoring)
+        run: .venv/bin/python -m looplab check-lsl --json || true

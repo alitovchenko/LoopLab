@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "benchmark_summary",
+  "description": "LoopLab 0.3.x benchmark_summary.json from latency_report.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "by_label": {
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "number" } }
+    },
+    "e2e_latency_seconds": { "type": "array", "items": { "type": "number" } },
+    "e2e_mean": { "type": "number" },
+    "e2e_stats": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "mean": { "type": "number" },
+        "std": { "type": "number" },
+        "p50": { "type": "number" },
+        "p95": { "type": "number" }
+      }
+    },
+    "intended_to_realized_seconds": { "type": "array", "items": { "type": "number" } },
+    "intended_to_realized_mean": { "type": "number" },
+    "intended_to_realized_stats": { "type": "object", "additionalProperties": true },
+    "acquisition_to_window_seconds": { "type": "array", "items": { "type": "number" } },
+    "acquisition_to_window_stats": { "type": "object", "additionalProperties": true },
+    "preprocess_latency_seconds": { "type": "array", "items": { "type": "number" } },
+    "preprocess_latency_stats": { "type": "object", "additionalProperties": true },
+    "features_latency_seconds": { "type": "array", "items": { "type": "number" } },
+    "features_latency_stats": { "type": "object", "additionalProperties": true },
+    "model_latency_seconds": { "type": "array", "items": { "type": "number" } },
+    "model_latency_stats": { "type": "object", "additionalProperties": true },
+    "policy_latency_seconds": { "type": "array", "items": { "type": "number" } },
+    "policy_latency_stats": { "type": "object", "additionalProperties": true },
+    "task_dispatch_latency_seconds": { "type": "array", "items": { "type": "number" } },
+    "task_dispatch_latency_stats": { "type": "object", "additionalProperties": true }
+  },
+  "required": ["by_label"]
+}

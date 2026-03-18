@@ -4,6 +4,12 @@
 
 LoopLab is a research-grade orchestration framework that sits between streaming tools (LSL), online preprocessing, user-defined models, and adaptive task control. It is the coordinator of the closed loop, allowing you to ingest streams, process data, run a model, emit control signals, adapt the task, and log everything for replay and benchmarking.
 
+## Documentation (guided path)
+
+**New users:** start at **[docs/index.md](docs/index.md)** → [Quickstart](docs/quickstart.md) (install → validate config → synthetic proof-run → run report), then [Concepts](docs/concepts/index.md), [Tutorials](docs/tutorials/index.md), [Extensions](docs/extensions/index.md), [Deployment](docs/deployment/index.md).
+
+**Run artifacts:** JSON contracts and stable vs experimental fields are documented in **[docs/artifact_schemas.md](docs/artifact_schemas.md)** (`schemas/*.schema.json` for validation).
+
 ## Features
 
 - **LSL-based stream ingestion** with configurable stream selection and chunk size
@@ -26,6 +32,8 @@ These tracks landed together to support **technical communication**, **real-task
 | **PsychoPy canonical adaptive path** | One runnable demo wires adaptation → task parameter (e.g. stimulus size) → **`report_realized`** → trial/block/outcome logging. Runs tag **`paradigm: psychopy_e2e`**; **run reports** include a **Task-level summary (PsychoPy bridge)** (trials, intended/realized counts, IT→R mean). Same **`components_manifest.json`** parity as proof-run. | **`examples/psychopy_e2e/`** (README: *Canonical adaptive PsychoPy path*); [docs/psychopy_integration.md](docs/psychopy_integration.md) |
 | **Plugin introspection** | **`list-components`** (class, full default config, docstring line, optional `component_version`), **`validate-config`** with **`--plugin`** for custom demos, richer **UnknownComponentError** hints. | [Developer tooling](#developer-tooling) |
 | **Synthetic scenarios** | Proof-run with YAML **`synthetic`** section: drift, dropouts, ack delay, irregular timing, etc., for stress/realism without hardware. | [Synthetic scenarios](#synthetic-scenarios-configurable-stress-and-realism); `examples/synthetic_scenario/` |
+| **Benchmark protocol** | What E2E, per-stage, and intended→realized mean; synthetic vs task-level vs LSL; versioned reference stats. | [docs/benchmarking.md](docs/benchmarking.md); `examples/benchmark_reference_runs/` |
+| **Artifact schemas** | Stable vs experimental fields for `session_summary`, `benchmark_summary`, `diagnostics`, `replay_result`, `components_manifest`, `run_report`; optional JSON Schema in `schemas/`. | [docs/artifact_schemas.md](docs/artifact_schemas.md) |
 
 ## Install
 
@@ -51,6 +59,13 @@ python -m venv .venv
 
 Optional (run proof-run manually):  
 `.venv/bin/python -m looplab proof-run --duration 2 --out-dir proof_run_output`
+
+**LSL (same mapping everywhere: matrix, artifacts, `check-lsl`):** **Supported** = synthetic core path → `lsl_support_tier`: **`synthetic_supported`**. **Best effort** = native LSL runtime → **`native_lsl_functional`** \| **`native_lsl_unavailable`**. **Monitoring-only** = `test-lsl` CI lane. Details and examples: [docs/deployment/lsl_compatibility_matrix.md](docs/deployment/lsl_compatibility_matrix.md).
+
+```bash
+python -m looplab check-lsl          # human: policy lines + probe result + lsl_support_tier
+python -m looplab check-lsl --json   # + environment (OS, Python, pylsl, liblsl); exit 0 ≠ full live cert
+```
 
 Tests that require native LSL discovery (`tests/test_integration_synthetic_lsl.py`) are skipped unless `RUN_LSL_TESTS=1`. CI runs them in a separate **optional, monitoring-only** job (`test-lsl`): that lane monitors upstream/native LSL compatibility only. A failure there does not indicate a LoopLab regression—only that native LSL is unstable in that environment.
 

@@ -1,0 +1,9 @@
+{
+  "by_label": {
+    "pull_chunk": [1.0, 1.1],
+    "policy_done": [1.02, 1.12]
+  },
+  "e2e_latency_seconds": [0.02, 0.02],
+  "e2e_mean": 0.02,
+  "e2e_stats": { "mean": 0.02, "std": 0.0, "p50": 0.02, "p95": 0.02 }
+}

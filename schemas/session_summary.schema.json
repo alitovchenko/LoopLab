@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "session_summary",
+  "description": "LoopLab 0.3.x proof-run session_summary.json (post-diagnostics merge).",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "duration_sec": { "type": "number" },
+    "seed": { "type": "number" },
+    "out_dir": { "type": "string" },
+    "artifacts_ok": { "type": "boolean" },
+    "replay_ok": { "type": "boolean" },
+    "lsl_available": { "type": "boolean" },
+    "lsl_support_tier": {
+      "type": "string",
+      "enum": ["synthetic_supported", "native_lsl_functional", "native_lsl_unavailable"],
+      "description": "stable: runtime tier for this run; see docs/deployment/lsl_compatibility_matrix.md"
+    },
+    "backend": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "run_health": { "type": "string" },
+    "diagnostics_summary": { "type": "string" },
+    "diagnostic_findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "level": { "type": "string" },
+          "code": { "type": "string" },
+          "message": { "type": "string" }
+        },
+        "required": ["level", "code", "message"]
+      }
+    },
+    "warning_messages": { "type": "array", "items": { "type": "string" } },
+    "paradigm": { "type": "string" },
+    "error": { "type": "string" },
+    "degraded": { "type": "boolean" }
+  },
+  "required": [
+    "duration_sec",
+    "seed",
+    "out_dir",
+    "artifacts_ok",
+    "replay_ok",
+    "lsl_available",
+    "backend",
+    "timestamp",
+    "run_health",
+    "diagnostics_summary",
+    "diagnostic_findings",
+    "warning_messages"
+  ]
+}

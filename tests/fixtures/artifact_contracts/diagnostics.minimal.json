@@ -1,0 +1,14 @@
+{
+  "health": "healthy",
+  "findings": [
+    {
+      "level": "info",
+      "code": "ok",
+      "message": "fixture",
+      "detail": {}
+    }
+  ],
+  "checks": [{ "name": "e2e_latency", "p95_sec": 0.05, "std_sec": 0.01 }],
+  "thresholds": { "e2e_p95_warning_sec": 0.12 },
+  "degraded_run_adjusted": false
+}

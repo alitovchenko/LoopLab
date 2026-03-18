@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "run_report",
+  "description": "LoopLab 0.3.x run_report.json from build_run_report.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "run_dir": { "type": "string" },
+    "methods": { "type": "object", "additionalProperties": true },
+    "pipeline": { "type": "object", "additionalProperties": true },
+    "backend": { "type": "string" },
+    "config_hash": { "type": "string" },
+    "experiment_summary": { "type": "object", "additionalProperties": true },
+    "adaptation": { "type": "object", "additionalProperties": true },
+    "replay_agreement": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "matches": {},
+            "match_count": {},
+            "mismatch_count": {},
+            "total_logged": {},
+            "total_replayed": {},
+            "divergences_sample": { "type": "array" },
+            "divergences_total": { "type": "integer" }
+          }
+        }
+      ]
+    },
+    "benchmark_highlights": { "type": "object", "additionalProperties": true },
+    "diagnostics_summary": { "type": "object", "additionalProperties": true },
+    "artifact_inventory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": { "type": "string" },
+          "present": { "type": "boolean" },
+          "bytes": { "anyOf": [{ "type": "integer" }, { "type": "null" }] }
+        },
+        "required": ["name", "present"]
+      }
+    },
+    "event_counts_selected": { "type": "object", "additionalProperties": { "type": "integer" } },
+    "task_level_summary": { "type": "object", "additionalProperties": true }
+  },
+  "required": [
+    "run_dir",
+    "methods",
+    "pipeline",
+    "backend",
+    "config_hash",
+    "experiment_summary",
+    "adaptation",
+    "replay_agreement",
+    "benchmark_highlights",
+    "diagnostics_summary",
+    "artifact_inventory",
+    "event_counts_selected"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "looplab_version": "0.3.0",
+  "feature_extractor": {
+    "name": "simple",
+    "registered": true,
+    "class": "looplab.features.simple.SimpleFeatures",
+    "default_config": {},
+    "effective_config": {}
+  },
+  "model": {
+    "name": "identity",
+    "registered": true,
+    "class": "looplab.model.example_models.IdentityModel",
+    "default_config": {},
+    "effective_config": {}
+  },
+  "policy": {
+    "name": "identity",
+    "registered": true,
+    "class": "looplab.controller.policy.IdentityPolicy",
+    "default_config": {},
+    "effective_config": {}
+  }
+}

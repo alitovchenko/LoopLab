@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "diagnostics",
+  "description": "LoopLab 0.3.x diagnostics.json from build_run_diagnostics.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "health": { "type": "string", "enum": ["healthy", "degraded", "unhealthy"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "level": { "type": "string" },
+          "code": { "type": "string" },
+          "message": { "type": "string" },
+          "detail": { "type": "object", "additionalProperties": true }
+        },
+        "required": ["level", "code", "message"]
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "thresholds": { "type": "object", "additionalProperties": true },
+    "degraded_run_adjusted": { "type": "boolean" }
+  },
+  "required": ["health", "findings", "checks", "thresholds", "degraded_run_adjusted"]
+}

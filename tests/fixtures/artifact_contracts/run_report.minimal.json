@@ -1,0 +1,81 @@
+{
+  "run_dir": "/tmp/run",
+  "methods": {
+    "window_size_samples": 32,
+    "buffer_max_samples": 1000,
+    "n_channels": 4,
+    "feature_extractor_name": "simple",
+    "model_name": "identity",
+    "policy_name": "identity",
+    "preprocess": "none",
+    "adaptation_target": "identity",
+    "backend": "synthetic",
+    "duration_sec": 2.0,
+    "effective_windows_per_sec": 5.0,
+    "timing_summary": { "e2e_seconds": { "mean": 0.02, "std": 0.0, "p50": 0.02, "p95": 0.02 } },
+    "warning_status": {
+      "run_health": "healthy",
+      "diagnostic_critical": 0,
+      "diagnostic_warning": 0,
+      "diagnostic_info": 1
+    },
+    "looplab_version": "0.3.0"
+  },
+  "pipeline": {
+    "source": "components_manifest.json",
+    "looplab_version": "0.3.0",
+    "feature_extractor": { "name": "simple", "registered": true },
+    "model": { "name": "identity", "registered": true },
+    "policy": { "name": "identity", "registered": true }
+  },
+  "backend": "synthetic",
+  "config_hash": "abc",
+  "experiment_summary": {
+    "trial_start": 0,
+    "trial_end": 0,
+    "block_start": 0,
+    "block_end": 0,
+    "trial_outcome": 0,
+    "has_experiment_events": false
+  },
+  "adaptation": {
+    "adaptive_params_update": 0,
+    "control_signal": 10,
+    "adaptation_target": "identity",
+    "first_control_action": "noop"
+  },
+  "replay_agreement": {
+    "matches": true,
+    "match_count": 10,
+    "mismatch_count": 0,
+    "total_logged": 10,
+    "total_replayed": 10,
+    "divergences_sample": [],
+    "divergences_total": 0
+  },
+  "benchmark_highlights": {
+    "e2e_mean_sec": 0.02,
+    "e2e_stats": { "mean": 0.02, "std": 0.0, "p50": 0.02, "p95": 0.02 },
+    "intended_to_realized_mean_sec": null,
+    "intended_to_realized_stats": null,
+    "stage_p95_seconds": {},
+    "window_count": 2
+  },
+  "diagnostics_summary": {
+    "health": "healthy",
+    "degraded_run_adjusted": false,
+    "findings_by_level": { "critical": 0, "warning": 0, "info": 1 },
+    "findings": []
+  },
+  "artifact_inventory": [
+    { "name": "session_summary.json", "present": true, "bytes": 100 }
+  ],
+  "event_counts_selected": {
+    "control_signal": 10,
+    "stimulus_intended": 0,
+    "stimulus_realized": 0,
+    "model_output": 10,
+    "benchmark_latency": 20
+  },
+  "task_level_summary": { "trial_starts": 0, "trial_outcomes": 0 }
+}

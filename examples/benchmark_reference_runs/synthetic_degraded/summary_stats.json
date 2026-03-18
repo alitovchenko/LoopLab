@@ -1,0 +1,46 @@
+{
+  "bundle": "synthetic_degraded",
+  "regenerate": "python -m looplab proof-run --backend synthetic --config examples/synthetic_scenario/config.yaml --duration 3 --out-dir /tmp/ll_ref_deg --seed 42",
+  "looplab_version": "0.3.0",
+  "e2e_mean": 0.00044199172189350887,
+  "e2e_stats": {
+    "mean": 0.00044199172189350887,
+    "std": 0.0003789166209636859,
+    "p50": 0.00020645900076488033,
+    "p95": 0.0010791250006150221
+  },
+  "preprocess_latency_stats": {
+    "mean": 5.392247684666539e-05,
+    "std": 4.69228762681559e-05,
+    "p50": 2.3333999706665054e-05,
+    "p95": 0.0001304159995925147
+  },
+  "features_latency_stats": {
+    "mean": 0.000119124384040309,
+    "std": 0.00010379305917472048,
+    "p50": 5.333300032361876e-05,
+    "p95": 0.0002909579998231493
+  },
+  "model_latency_stats": {
+    "mean": 5.254474834880918e-05,
+    "std": 4.453713663612258e-05,
+    "p50": 2.4499999199179e-05,
+    "p95": 0.00012570800026878715
+  },
+  "policy_latency_stats": {
+    "mean": 2.61321456853103e-05,
+    "std": 2.239354480811302e-05,
+    "p50": 1.1500000255182385e-05,
+    "p95": 6.483300057880115e-05
+  },
+  "task_dispatch_latency_stats": {
+    "mean": 0.00010310070859648006,
+    "std": 9.201241335716566e-05,
+    "p50": 4.654199983633589e-05,
+    "p95": 0.00024124999981722794
+  },
+  "n_pull_chunk": 151,
+  "n_policy_done": 151,
+  "n_stimulus_intended": 0,
+  "n_stimulus_realized": 0
+}

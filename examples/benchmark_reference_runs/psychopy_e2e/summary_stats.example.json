@@ -1,0 +1,20 @@
+{
+  "_comment": "Example shape after REGENERATE.md; numbers are illustrative only — run locally to replace.",
+  "bundle": "psychopy_e2e",
+  "e2e_mean": 0.0004,
+  "e2e_stats": {
+    "mean": 0.0004,
+    "std": 0.0003,
+    "p50": 0.00025,
+    "p95": 0.001
+  },
+  "intended_to_realized_mean": 0.012,
+  "intended_to_realized_stats": {
+    "mean": 0.012,
+    "std": 0.008,
+    "p50": 0.01,
+    "p95": 0.035
+  },
+  "n_stimulus_intended": 80,
+  "n_stimulus_realized": 80
+}

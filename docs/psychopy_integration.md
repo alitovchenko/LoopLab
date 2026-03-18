@@ -1,5 +1,7 @@
 # PsychoPy integration contract
 
+**Docs hub:** [index.md](index.md) · **Deployment:** [deployment/psychopy_task_integration.md](deployment/psychopy_task_integration.md) · **Tutorial:** [tutorials/psychopy_e2e.md](tutorials/psychopy_e2e.md)
+
 **Runnable reference:** The end-to-end adaptive path (loop → task parameter → `report_realized` → full artifacts) lives in **`examples/psychopy_e2e`** — see that README’s *Canonical adaptive PsychoPy path* section.
 
 This document defines how a PsychoPy task integrates with LoopLab’s controller loop and logging.
