@@ -62,8 +62,10 @@ def main() -> None:
     )
     with open(out_dir / "config_snapshot.json", "w", encoding="utf-8") as f:
         json.dump(config_to_dict(config), f, indent=2)
+    from looplab.runner import build_components_manifest, create_runner
 
-    from looplab.runner import create_runner
+    with open(out_dir / "components_manifest.json", "w", encoding="utf-8") as f:
+        json.dump(build_components_manifest(config), f, indent=2)
     from looplab.controller.loop import ControllerLoop
     components = create_runner(config)
     loop = ControllerLoop(
@@ -118,10 +120,14 @@ def main() -> None:
     if str(script_dir) not in sys.path:
         sys.path.insert(0, str(script_dir))
     from task import run_psychopy_task
+    from looplab.experiment import ExperimentState
+
+    experiment_state = ExperimentState()
+    logger = components["logger"]
 
     tick_thread = threading.Thread(target=tick_loop)
     tick_thread.start()
-    run_psychopy_task(adapter, duration, trial_duration=0.25)
+    run_psychopy_task(adapter, duration, trial_duration=0.25, experiment_state=experiment_state, logger=logger)
 
     stop_flag.set()
     tick_thread.join(timeout=duration + 2)
@@ -195,17 +201,30 @@ def main() -> None:
         "replay_ok": replay_ok,
         "lsl_available": False,
         "backend": "synthetic",
+        "paradigm": "psychopy_e2e",
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
-    with open(out_dir / "session_summary.json", "w", encoding="utf-8") as f:
-        json.dump(session_summary, f, indent=2)
-
     run_warnings = []
     if not points:
         run_warnings.append("no_benchmark_events")
     if not chunks:
         run_warnings.append("replay_skipped_no_chunks")
+    from looplab.benchmark.diagnostics import write_run_diagnostics_artifacts
     from looplab.benchmark.run_summary import build_run_package_summary, format_run_summary_markdown
+
+    diag, warning_inv = write_run_diagnostics_artifacts(
+        out_dir,
+        event_counts,
+        bench_report,
+        replay_result,
+        log_path,
+        stream_path,
+        session_summary,
+        run_warnings,
+    )
+    with open(out_dir / "session_summary.json", "w", encoding="utf-8") as f:
+        json.dump(session_summary, f, indent=2)
+
     config_snap = json.loads((out_dir / "config_snapshot.json").read_text(encoding="utf-8"))
     run_package_summary = build_run_package_summary(
         event_counts,
@@ -215,16 +234,21 @@ def main() -> None:
         replay_result=replay_result,
         config_snapshot=config_snap,
         backend="synthetic",
-        warnings=run_warnings,
+        warnings=warning_inv,
+        diagnostics=diag,
     )
     with open(out_dir / "run_package_summary.json", "w", encoding="utf-8") as f:
         json.dump(run_package_summary, f, indent=2)
     with open(out_dir / "RUN_SUMMARY.md", "w", encoding="utf-8") as f:
         f.write(format_run_summary_markdown(run_package_summary))
+    from looplab.benchmark.run_report import write_run_report_artifacts
+
+    write_run_report_artifacts(out_dir)
 
     print(f"Artifacts written to {out_dir}/", file=sys.stderr)
-    print("  config_snapshot.json, events.jsonl, stream.jsonl, replay_result.json,")
-    print("  benchmark_summary.json, session_summary.json, run_package_summary.json, RUN_SUMMARY.md", file=sys.stderr)
+    print("  config_snapshot.json, components_manifest.json, events.jsonl, stream.jsonl,", file=sys.stderr)
+    print("  replay_result.json, benchmark_summary.json, run_package_summary.json,", file=sys.stderr)
+    print("  RUN_SUMMARY.md, run_report.json, run_report.md", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -10,8 +10,16 @@ import numpy as np
 from looplab.controller.signals import ModelOutput
 from looplab.exceptions import UnknownComponentError
 
-# Registry: name -> (class or factory, optional config)
-_MODEL_REGISTRY: dict[str, tuple[Type["Model"] | Callable[..., "Model"], dict[str, Any]]] = {}
+# Registry: name -> (class or factory, default config, meta e.g. version)
+_MODEL_REGISTRY: dict[str, tuple[Type["Model"] | Callable[..., "Model"], dict[str, Any], dict[str, Any]]] = {}
+
+
+def _unpack_model_entry(
+    entry: tuple,
+) -> tuple[Type["Model"] | Callable[..., "Model"], dict[str, Any], dict[str, Any]]:
+    if len(entry) == 2:
+        return entry[0], entry[1], {}
+    return entry[0], entry[1], entry[2]
 
 
 class Model(ABC):
@@ -27,7 +35,7 @@ class Model(ABC):
         ...
 
 
-def get_model_registry() -> dict[str, tuple[Type[Model] | Callable[..., Model], dict[str, Any]]]:
+def get_model_registry() -> dict[str, tuple[Type[Model] | Callable[..., Model], dict[str, Any], dict[str, Any]]]:
     return _MODEL_REGISTRY.copy()
 
 
@@ -35,16 +43,21 @@ def register_model(
     name: str,
     model_class: Type[Model] | Callable[..., Model],
     default_config: dict[str, Any] | None = None,
+    *,
+    component_version: str | None = None,
 ) -> None:
     """Register a model by name for config-based lookup."""
-    _MODEL_REGISTRY[name] = (model_class, default_config or {})
+    meta: dict[str, Any] = {}
+    if component_version:
+        meta["version"] = component_version
+    _MODEL_REGISTRY[name] = (model_class, default_config or {}, meta)
 
 
 def create_model(name: str, config: dict[str, Any] | None = None) -> Model:
     """Instantiate a registered model by name with optional config overrides."""
     if name not in _MODEL_REGISTRY:
         raise UnknownComponentError("model", name, list(_MODEL_REGISTRY))
-    model_class, defaults = _MODEL_REGISTRY[name]
+    model_class, defaults, _meta = _unpack_model_entry(_MODEL_REGISTRY[name])
     opts = {**defaults, **(config or {})}
     if isinstance(model_class, type):
         return model_class(**opts)

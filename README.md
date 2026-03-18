@@ -16,6 +16,17 @@ LoopLab is a research-grade orchestration framework that sits between streaming 
 - **Stream recorder** and **deterministic replay** from log + recorded stream
 - **Timing benchmarks**: hooks and simple latency report (e2e, intended→realized)
 
+## Recent workstreams
+
+These tracks landed together to support **technical communication**, **real-task PsychoPy integration**, and **developer ergonomics**:
+
+| Workstream | What it adds | Where to look |
+|------------|--------------|---------------|
+| **Methods-ready run reporting** | Every proof-run (and `report --run-dir … --write`) can emit **`run_report.json`** / **`run_report.md`**: citable pipeline fields, timing stats, adaptation & experiment event counts, replay agreement, diagnostics summary, **artifact inventory**. **`components_manifest.json`** records resolved feature/model/policy (defaults + effective config, class names, LoopLab version). | [Proof run](#proof-run-canonical-verification) artifact table; `python -m looplab report --run-dir <dir> [--human] [--write]` |
+| **PsychoPy canonical adaptive path** | One runnable demo wires adaptation → task parameter (e.g. stimulus size) → **`report_realized`** → trial/block/outcome logging. Runs tag **`paradigm: psychopy_e2e`**; **run reports** include a **Task-level summary (PsychoPy bridge)** (trials, intended/realized counts, IT→R mean). Same **`components_manifest.json`** parity as proof-run. | **`examples/psychopy_e2e/`** (README: *Canonical adaptive PsychoPy path*); [docs/psychopy_integration.md](docs/psychopy_integration.md) |
+| **Plugin introspection** | **`list-components`** (class, full default config, docstring line, optional `component_version`), **`validate-config`** with **`--plugin`** for custom demos, richer **UnknownComponentError** hints. | [Developer tooling](#developer-tooling) |
+| **Synthetic scenarios** | Proof-run with YAML **`synthetic`** section: drift, dropouts, ack delay, irregular timing, etc., for stress/realism without hardware. | [Synthetic scenarios](#synthetic-scenarios-configurable-stress-and-realism); `examples/synthetic_scenario/` |
+
 ## Install
 
 ```bash
@@ -112,13 +123,17 @@ Optional flags: `--duration 4` (seconds), `--out-dir proof_run_output`, `--seed 
 | `stream.jsonl` | Recorded LSL stream chunks. |
 | `replay_result.json` | Replay outcome: `match_count`, `mismatch_count`, `total_logged`, `total_replayed`, `matches`, `divergences`. |
 | `benchmark_summary.json` | Latency report (e.g. e2e mean, intended→realized if present). |
-| `session_summary.json` | High-level summary: `duration_sec`, `seed`, `out_dir`, `artifacts_ok`, `replay_ok`, `lsl_available`, `timestamp`. |
-| `run_package_summary.json` | Run package summary: component versions, action/window counts, replay match status, benchmark readiness, warnings, config hash, backend. |
-| `RUN_SUMMARY.md` | One-page markdown report of the run package summary (same data as above). |
+| `components_manifest.json` | Resolved pipeline: LoopLab version, feature/model/policy class names, default vs effective config, optional per-component `component_version`. |
+| `diagnostics.json` | Run-quality checks: `health` (`healthy` / `degraded` / `unhealthy`), `findings` (info/warning/critical), `checks`, thresholds used. |
+| `session_summary.json` | High-level summary plus `run_health`, `diagnostic_findings`, `warning_messages` (merged legacy + diagnostic warnings). |
+| `run_package_summary.json` | Run package summary: includes optional `diagnostics` block, component versions, replay, benchmark readiness, `warning_inventory`. |
+| `RUN_SUMMARY.md` | One-page markdown report including **Run diagnostics** (health and findings). Points to **run_report.md** for methods detail. |
+| `run_report.json` | Methods-ready aggregate: citable **methods** block (window size, model/policy/feature names, adaptation target, timing stats, warning status), pipeline (from manifest or config), experiment/adaptation counts, optional **task_level_summary** (e.g. PsychoPy bridge when `paradigm: psychopy_e2e`), replay, benchmark highlights, diagnostics, artifact inventory. |
+| `run_report.md` | Human-readable version of the same, including **Task-level summary (PsychoPy bridge)** when present. |
 
 When LSL discovery fails (exit 2), `out_dir` may still contain `config_snapshot.json` and a minimal `session_summary.json` with `lsl_available: false` and an `error` field.
 
-**Methods-ready fields:** For reporting pipeline timing in methods, use `benchmark_summary.json`: `e2e_mean`, `e2e_stats` (mean, std, p50, p95), `intended_to_realized_mean`, `intended_to_realized_stats`, and per-stage `*_latency_stats` when benchmark hooks are enabled. Cite the pipeline version and `config_snapshot.json` for reproducibility.
+**Methods-ready fields:** Use **`run_report.json`** / **`run_report.md`** for a single place to cite window size, buffer, feature extractor / model / policy names, adaptation target, backend, duration, effective windows/s, timing summaries, replay agreement, diagnostics health, and trial/block counts (when experiment events are logged). PsychoPy e2e runs also surface **task-level** trial/outcome counts and stimulus intended/realized stats in the same report. Raw detail remains in `benchmark_summary.json` (`e2e_stats`, `intended_to_realized_stats`, per-stage latencies). Cite LoopLab version from `components_manifest.json` or `run_report.methods.looplab_version` and `config_snapshot.json` for full reproducibility.
 
 No hardware or config file required. Another developer can clone the repo, `pip install -e .`, and run this to confirm the pipeline works end-to-end. For a PsychoPy task that produces the full artifact set in one run, see **`examples/psychopy_e2e/`**. For differentiated adaptive paradigms (difficulty control, model-based feedback), see **`examples/adaptive_difficulty_demo/`** and **`examples/model_feedback_demo/`**.
 
@@ -129,14 +144,28 @@ No hardware or config file required. Another developer can clone the repo, `pip 
 | `examples/closed_loop_demo/` | Minimal config-driven loop (identity model/policy); run via `proof-run` or `run --config`. |
 | `examples/adaptive_difficulty_demo/` | Pipeline drives task difficulty (easy/medium/hard); custom policy, full artifacts. |
 | `examples/model_feedback_demo/` | Model output drives feedback type (A/B); custom model and policy, full artifacts. |
-| `examples/psychopy_e2e/` | Real PsychoPy task in the same process as the pipeline; full artifact set. |
+| `examples/psychopy_e2e/` | **Canonical adaptive PsychoPy path:** real task, full artifacts + `components_manifest.json`, `paradigm: psychopy_e2e`, task-level run-report section. |
 | `examples/psychopy_simple_task/` | Minimal PsychoPy pattern: pop_pending, apply, report_realized. |
 | `examples/stress_replay/` | Replay with stream stressors (drop chunks, noise) for fault simulation. |
+| `examples/synthetic_scenario/` | Proof-run with configurable synthetic scenario (drift, dropouts, ack delay, etc.). |
 | `examples/plugin_templates/` | Stub files for custom feature extractors, models, and policies. |
+
+## Developer tooling
+
+| Command | Purpose |
+|--------|---------|
+| `python -m looplab list-components` | Full catalog: implementing class, `default_config`, optional `component_version`, one-line description. Use `--json` for machines. |
+| `python -m looplab list` | Short list of names and default config keys (backward compatible). |
+| `python -m looplab validate-config --config path/to/config.yaml` | Check that `feature_extractor`, `model`, and `policy` are registered and that `*_config` can instantiate each component. |
+| `python -m looplab validate-config --config ... --plugin path/to/plugins.py` | Load a plugin module first (same as demos that `import plugins` before `create_runner`). Repeat `--plugin` for multiple files. |
+| `validate-config … --strict` / `--json` | Optional: fail on preprocess/task_adapter warnings (`--strict`); structured exit payload (`--json`). |
+| `python -m looplab new feature\|model\|policy <name>` | Write a starter `.py` next to [examples/plugin_templates/](examples/plugin_templates/). |
+
+Unknown component errors suggest **`list-components`** and **`validate-config`**. After **`proof-run`**, see **`components_manifest.json`** for exactly what was wired.
 
 ## Adding plugins
 
-You can add custom feature extractors, models, and policies without editing core code. Implement the protocol, register by name, and reference from config. Run **`looplab list`** (or `--features`, `--models`, `--policies`) to see registered plugins.
+You can add custom feature extractors, models, and policies without editing core code. Implement the protocol, register by name, and reference from config. Run **`looplab list-components`** (or **`looplab list`**) to see registered plugins. Optional: `register_*(..., component_version="1.0.0")` for manifests and introspection.
 
 - **Feature extractors:** Implement `FeatureExtractor` (e.g. `extract(data, t_start, t_end, context)`). Call `register_feature_extractor("myname", MyExtractor, {"param": default})`. In config set `feature_extractor: "myname"` and optionally `feature_extractor_config: {...}`.
 - **Models:** Implement `Model` and `register_model("myname", MyModel, default_config)`. Config: `model: "myname"`, `model_config: {...}`. See [model/base.py](src/looplab/model/base.py) and [model/example_models.py](src/looplab/model/example_models.py).
@@ -160,7 +189,8 @@ src/looplab/
   replay/        # StreamRecorder, ReplayEngine, ReplayRunner, stressors
   config/        # RunConfig, load_config
   runner.py      # create_runner
-  __main__.py    # CLI: run, replay, benchmark, proof-run
+  introspection.py  # list-components catalog
+  __main__.py    # CLI: run, replay, proof-run, list-components, validate-config, …
 ```
 
 ## PsychoPy integration
@@ -171,11 +201,27 @@ Use `PsychoPyTaskAdapter`: the controller pushes `ControlSignal` objects into a 
 2. Apply the change (e.g. set condition, difficulty, stimulus).
 3. After `win.flip()`, call `adapter.report_realized(signal, lsl_clock())` so the logger records the realized event.
 
-The full **PsychoPy integration contract** (who creates the adapter, when to call `pop_pending`, meaning of `report_realized`, how to obtain `lsl_clock`) is in [docs/psychopy_integration.md](docs/psychopy_integration.md). See `examples/psychopy_simple_task/` for a minimal runnable pattern and `examples/closed_loop_demo/` for a config-based proof-run style reference.
+The full **PsychoPy integration contract** (who creates the adapter, when to call `pop_pending`, meaning of `report_realized`, how to obtain `lsl_clock`) is in [docs/psychopy_integration.md](docs/psychopy_integration.md). The **end-to-end adaptive reference** is **`examples/psychopy_e2e/`** (numbered plug-in flow, full artifacts, methods-ready report with task-level summary). See `examples/psychopy_simple_task/` for a minimal code-only pattern and `examples/closed_loop_demo/` for config-based proof-run style reference.
 
 ## Synthetic vs live parity
 
-Proof-run supports `--backend synthetic` (pure Python, no LSL) and `--backend lsl`. Both use the same `ControllerLoop` and produce the **same canonical artifact layout** (config_snapshot, events, stream, replay_result, benchmark_summary, session_summary) and the same report key structure. Developing and testing against synthetic is therefore valid for live runs; the only difference is the data source (in-process generator vs LSL discovery). Replay uses “one pipeline run per chunk”; synthetic proof-run ticks once per chunk to match.
+Proof-run supports `--backend synthetic` (pure Python, no LSL) and `--backend lsl`. Both use the same `ControllerLoop` and produce the **same canonical artifact layout** (including **`components_manifest.json`**, **`run_report.json`** / **`run_report.md`**, diagnostics, package summary) when the run completes successfully. Developing and testing against synthetic is therefore valid for live runs; the only difference is the data source (in-process generator vs LSL discovery). Replay uses “one pipeline run per chunk”; synthetic proof-run ticks once per chunk to match.
+
+## Synthetic scenarios (configurable stress and realism)
+
+When running with `--backend synthetic`, you can pass a config file that includes a **`synthetic`** section to control signal type and degradation schedules (scenarios: `stationary_clean`, `drifting_attention`, `regime_shift`; schedules: dropouts, noise_bursts, ack_delay_ms, event_omission, policy_noop, low_confidence, irregular_timing, invalid_windows). Example: `python -m looplab proof-run --config examples/synthetic_scenario/config.yaml --out-dir scenario_out --duration 4`. See [examples/synthetic_scenario/](examples/synthetic_scenario/) and `pytest tests/test_synthetic_scenarios.py`.
+
+## Experiment abstraction
+
+LoopLab provides **experiment-level types** so adaptation can be described and logged in trial/block terms, not only as raw control signals. This supports methods-ready reporting (e.g. "trial 5, block 0, difficulty=2, outcome=correct").
+
+- **TrialContext** – Identifies the current trial (trial_index, block_index, condition, onset_lsl_time). Use when logging trial start.
+- **BlockContext** – Identifies the current block (block_index, label, start_lsl_time). Use when logging block start.
+- **ExperimentState** – Holds current_trial, current_block, and **AdaptiveParameterState** (a mutable dict of named adaptive parameters, e.g. difficulty, feedback_type). Methods: `start_block`, `start_trial`, `record_outcome`.
+- **TrialOutcome** – Result of a trial (trial_index, block_index, correct, rt_sec, condition, extra). The task reports this at trial end.
+- **Task-level event stream** – The same event log (events.jsonl) can include event types: `trial_start`, `trial_end`, `block_start`, `block_end`, `trial_outcome`, `adaptive_params_update`. EventLogger has `log_trial_start`, `log_block_start`, `log_trial_outcome`, `log_adaptive_params_update` (and optional trial_end/block_end).
+
+The **task** (e.g. PsychoPy script) owns the trial loop; it can create an `ExperimentState`, update it when applying control signals (e.g. set difficulty or stimulus_size in adaptive_params), and call the logger to write these events. The runner does not create ExperimentState by default; demos that want experiment-level logging create it and pass it to the task. See `examples/adaptive_difficulty_demo/` and `examples/psychopy_e2e/` for demos that log adaptation in experiment terms.
 
 ## Deterministic replay
 

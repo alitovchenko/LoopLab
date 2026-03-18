@@ -18,9 +18,12 @@ feature_extractor_config: {}
 model: "binary_feedback"
 model_config:
   threshold: 0.0
+  confidence_epsilon: 0.2
+  confidence_low: 0.3
 policy: "feedback"
 policy_config:
   validity_seconds: 1.0
+  confidence_threshold: 0.5
 
 task_adapter: "psychopy"
 log_path: "model_feedback_events.jsonl"

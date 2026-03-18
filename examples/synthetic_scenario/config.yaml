@@ -1,0 +1,54 @@
+# Example: proof-run with configurable synthetic scenario (stress/realism).
+# Run: python -m looplab proof-run --config examples/synthetic_scenario/config.yaml --out-dir scenario_out --duration 4
+
+lsl:
+  name: "FakeEEG"
+  type: "EEG"
+  chunk_size: 8
+  timeout: 5.0
+
+buffer:
+  max_samples: 500
+  n_channels: 2
+
+preprocess: "none"
+feature_extractor: "simple"
+model: "identity"
+policy: "identity"
+task_adapter: "psychopy"
+log_path: "events.jsonl"
+record_stream_path: "stream.jsonl"
+benchmark: true
+
+# Synthetic scenario: signal type + degradation schedules (used when --backend synthetic).
+synthetic:
+  scenario: drifting_attention   # stationary_clean | drifting_attention | drifting_latent_state | regime_shift
+  seed: 42
+  dropouts:
+    enabled: true
+    probability: 0.05
+  noise_bursts:
+    enabled: true
+    every_n_seconds: 8
+    scale: 1.0
+  ack_delay_ms:
+    mean: 35
+    jitter: 10
+  event_omission:
+    enabled: true
+    probability: 0.05
+  # policy_noop:
+  #   enabled: true
+  #   every_n_seconds: 10
+  #   duration_seconds: 0.5
+  # low_confidence:
+  #   enabled: true
+  #   every_n_seconds: 12
+  #   duration_seconds: 0.5
+  #   confidence: 0.2
+  # irregular_timing:
+  #   enabled: true
+  #   jitter_seconds: 0.005
+  # invalid_windows:
+  #   enabled: true
+  #   probability: 0.02

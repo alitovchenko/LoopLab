@@ -51,6 +51,34 @@ class EventLogger:
     def log_benchmark(self, lsl_time: float, label: str, **kwargs: Any) -> None:
         self.log(EventType.BENCHMARK_LATENCY, lsl_time, {"label": label, **kwargs})
 
+    # Task-level / experiment-level events
+    def log_trial_start(self, lsl_time: float, trial_context: "TrialContext") -> None:
+        from looplab.experiment.state import TrialContext
+        if not isinstance(trial_context, TrialContext):
+            raise TypeError("trial_context must be TrialContext")
+        self.log(EventType.TRIAL_START, lsl_time, trial_context.to_dict())
+
+    def log_trial_end(self, lsl_time: float, trial_index: int, block_index: int) -> None:
+        self.log(EventType.TRIAL_END, lsl_time, {"trial_index": trial_index, "block_index": block_index})
+
+    def log_block_start(self, lsl_time: float, block_context: "BlockContext") -> None:
+        from looplab.experiment.state import BlockContext
+        if not isinstance(block_context, BlockContext):
+            raise TypeError("block_context must be BlockContext")
+        self.log(EventType.BLOCK_START, lsl_time, block_context.to_dict())
+
+    def log_block_end(self, lsl_time: float, block_index: int) -> None:
+        self.log(EventType.BLOCK_END, lsl_time, {"block_index": block_index})
+
+    def log_trial_outcome(self, lsl_time: float, outcome: "TrialOutcome") -> None:
+        from looplab.experiment.state import TrialOutcome
+        if not isinstance(outcome, TrialOutcome):
+            raise TypeError("outcome must be TrialOutcome")
+        self.log(EventType.TRIAL_OUTCOME, lsl_time, outcome.to_dict())
+
+    def log_adaptive_params_update(self, lsl_time: float, params: dict[str, Any]) -> None:
+        self.log(EventType.ADAPTIVE_PARAMS_UPDATE, lsl_time, params)
+
     def flush(self) -> None:
         if self._writer is not None and hasattr(self._writer, "close"):
             pass  # writer flushes on each write

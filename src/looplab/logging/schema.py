@@ -15,6 +15,13 @@ class EventType(str, Enum):
     STIMULUS_INTENDED = "stimulus_intended"
     STIMULUS_REALIZED = "stimulus_realized"
     BENCHMARK_LATENCY = "benchmark_latency"
+    # Task-level / experiment-level events
+    TRIAL_START = "trial_start"
+    TRIAL_END = "trial_end"
+    BLOCK_START = "block_start"
+    BLOCK_END = "block_end"
+    TRIAL_OUTCOME = "trial_outcome"
+    ADAPTIVE_PARAMS_UPDATE = "adaptive_params_update"
 
 
 @dataclass

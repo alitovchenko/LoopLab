@@ -20,4 +20,4 @@ class IdentityModel(Model):
         return ModelOutput(value=float(np.mean(f)), confidence=1.0)
 
 
-register_model("identity", IdentityModel, {})
+register_model("identity", IdentityModel, {}, component_version="1.0.0")

@@ -36,6 +36,7 @@ def main() -> None:
     parser.add_argument("--out-dir", type=str, default="demo_out", help="Output directory for artifacts")
     parser.add_argument("--duration", type=float, default=4.0, help="Run duration in seconds")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for replay")
+    parser.add_argument("--degraded", action="store_true", help="Use synthetic scenario (dropouts, noise, drifting_attention) for chunk stream")
     args = parser.parse_args()
 
     from looplab.streams import clock as clock_mod
@@ -95,19 +96,44 @@ def main() -> None:
     rng = np.random.default_rng(args.seed)
     sample_idx = 0
 
+    def _normal_chunk():
+        data = rng.standard_normal((chunk_size, n_channels)).astype(np.float64)
+        ts_start = start + sample_idx / srate
+        timestamps = [ts_start + j / srate for j in range(chunk_size)]
+        return data, timestamps
+
+    chunk_iter = None
+    if args.degraded:
+        from looplab.synthetic import SyntheticConfig, generate_chunks
+        from looplab.synthetic.config import DropoutConfig, NoiseBurstConfig
+        syn_cfg = SyntheticConfig(
+            scenario="drifting_attention",
+            seed=args.seed,
+            dropouts=DropoutConfig(enabled=True, probability=0.05),
+            noise_bursts=NoiseBurstConfig(enabled=True, every_n_seconds=8.0),
+        )
+        chunk_iter = generate_chunks(syn_cfg, duration, n_channels, chunk_size, srate, start, chunk_interval)
+
     try:
-        while lsl_clock() - start < duration:
-            data = rng.standard_normal((chunk_size, n_channels)).astype(np.float64)
-            ts_start = start + sample_idx / srate
-            timestamps = [ts_start + j / srate for j in range(chunk_size)]
-            sample_idx += chunk_size
+        while True:
+            if args.degraded and chunk_iter is not None:
+                try:
+                    data, timestamps, _valid = next(chunk_iter)
+                except StopIteration:
+                    break
+            else:
+                if lsl_clock() - start >= duration:
+                    break
+                data, timestamps = _normal_chunk()
+                sample_idx += chunk_size
             buffer.append(data, timestamps)
             if hooks:
                 hooks.record_pull_chunk(lsl_clock())
             if recorder:
                 recorder.record(data, timestamps)
             loop.tick()
-            time.sleep(chunk_interval)
+            if not args.degraded:
+                time.sleep(chunk_interval)
     finally:
         writer.close()
         if recorder:
@@ -182,17 +208,30 @@ def main() -> None:
         "lsl_available": False,
         "backend": "synthetic",
         "paradigm": "model_feedback",
+        "degraded": args.degraded,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
-    with open(out_dir / "session_summary.json", "w", encoding="utf-8") as f:
-        json.dump(session_summary, f, indent=2)
-
     run_warnings = []
     if not points:
         run_warnings.append("no_benchmark_events")
     if not chunks:
         run_warnings.append("replay_skipped_no_chunks")
+    from looplab.benchmark.diagnostics import write_run_diagnostics_artifacts
     from looplab.benchmark.run_summary import build_run_package_summary, format_run_summary_markdown
+
+    diag, warning_inv = write_run_diagnostics_artifacts(
+        out_dir,
+        event_counts,
+        bench_report,
+        replay_result,
+        log_path,
+        stream_path,
+        session_summary,
+        run_warnings,
+    )
+    with open(out_dir / "session_summary.json", "w", encoding="utf-8") as f:
+        json.dump(session_summary, f, indent=2)
+
     config_snap = json.loads((out_dir / "config_snapshot.json").read_text(encoding="utf-8"))
     run_package_summary = build_run_package_summary(
         event_counts,
@@ -202,16 +241,21 @@ def main() -> None:
         replay_result=replay_result,
         config_snapshot=config_snap,
         backend="synthetic",
-        warnings=run_warnings,
+        warnings=warning_inv,
+        diagnostics=diag,
     )
     with open(out_dir / "run_package_summary.json", "w", encoding="utf-8") as f:
         json.dump(run_package_summary, f, indent=2)
     with open(out_dir / "RUN_SUMMARY.md", "w", encoding="utf-8") as f:
         f.write(format_run_summary_markdown(run_package_summary))
+    from looplab.benchmark.run_report import write_run_report_artifacts
+
+    write_run_report_artifacts(out_dir)
 
     print(f"Artifacts written to {out_dir}/", file=sys.stderr)
     print("  config_snapshot.json, events.jsonl, stream.jsonl, replay_result.json,", file=sys.stderr)
-    print("  benchmark_summary.json, session_summary.json, run_package_summary.json, RUN_SUMMARY.md", file=sys.stderr)
+    print("  benchmark_summary.json, diagnostics.json, run_package_summary.json, RUN_SUMMARY.md,", file=sys.stderr)
+    print("  run_report.json, run_report.md", file=sys.stderr)
 
 
 if __name__ == "__main__":

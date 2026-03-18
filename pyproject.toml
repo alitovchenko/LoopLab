@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "looplab"
-version = "0.1.0"
+version = "0.3.0"
 description = "EEG-first, Python-native closed-loop experiment SDK with LSL, PsychoPy, and deterministic replay"
 readme = "README.md"
 requires-python = ">=3.10"

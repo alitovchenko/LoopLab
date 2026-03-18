@@ -17,5 +17,6 @@ class UnknownComponentError(Exception):
         return (
             f"Unknown {self.component_type} {self.name!r}. "
             f"Registered: [{available_str}]. "
-            "Use 'looplab list' to see all plugins."
+            "Try: python -m looplab list-components   "
+            "or: python -m looplab validate-config --config <path> [--plugin plugins.py]"
         )

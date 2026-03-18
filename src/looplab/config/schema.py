@@ -40,6 +40,7 @@ class RunConfig:
     log_path: str = "looplab_events.jsonl"
     record_stream_path: str | None = None
     benchmark: bool = False
+    synthetic: dict[str, Any] | None = None
 
 
 def config_to_dict(config: RunConfig) -> dict[str, Any]:
@@ -92,4 +93,5 @@ def _dict_to_config(d: dict[str, Any]) -> RunConfig:
         log_path=d.get("log_path", "looplab_events.jsonl"),
         record_stream_path=d.get("record_stream_path"),
         benchmark=d.get("benchmark", False),
+        synthetic=d.get("synthetic"),
     )

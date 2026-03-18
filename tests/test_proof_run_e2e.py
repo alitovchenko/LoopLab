@@ -10,13 +10,17 @@ import pytest
 
 CANONICAL_FILES = (
     "config_snapshot.json",
+    "components_manifest.json",
     "events.jsonl",
     "stream.jsonl",
     "replay_result.json",
     "benchmark_summary.json",
+    "diagnostics.json",
     "session_summary.json",
     "run_package_summary.json",
     "RUN_SUMMARY.md",
+    "run_report.json",
+    "run_report.md",
 )
 
 
@@ -64,6 +68,8 @@ def test_proof_run_e2e():
         assert "replay_ok" in session, "session_summary should have replay_ok"
         assert session.get("artifacts_ok") is True, "artifacts_ok should be true on success"
         assert session.get("replay_ok") is True, "replay_ok should be true on success"
+        assert "run_health" in session, "session_summary should include run_health"
+        assert (out / "diagnostics.json").exists(), "diagnostics.json should exist"
 
         with open(out / "replay_result.json", encoding="utf-8") as f:
             replay_result = json.load(f)
@@ -82,7 +88,7 @@ SESSION_SUMMARY_KEYS = {"duration_sec", "seed", "out_dir", "artifacts_ok", "repl
 BENCHMARK_SUMMARY_KEYS = {"by_label"}  # at least; may have e2e_mean, e2e_stats, intended_to_realized_*, etc.
 RUN_PACKAGE_SUMMARY_KEYS = {
     "component_versions", "action_counts", "window_count", "replay_match_status",
-    "benchmark_readiness", "warning_inventory", "config_hash", "backend",
+    "benchmark_readiness", "warning_inventory", "config_hash", "backend", "diagnostics",
 }
 
 

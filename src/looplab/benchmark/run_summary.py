@@ -28,6 +28,7 @@ def build_run_package_summary(
     config_snapshot: dict[str, Any] | None = None,
     backend: str | None = None,
     warnings: list[str] | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Build the run package summary dict. If run_dir is set, load session_summary, replay_result,
@@ -110,6 +111,12 @@ def build_run_package_summary(
         "config_hash": config_hash,
         "backend": backend_val,
     }
+    if diagnostics:
+        summary["diagnostics"] = {
+            "health": diagnostics.get("health"),
+            "findings": diagnostics.get("findings", []),
+            "checks": diagnostics.get("checks", []),
+        }
     return summary
 
 
@@ -163,6 +170,20 @@ def format_run_summary_markdown(summary: dict[str, Any]) -> str:
         lines.append("- None")
     lines.append("")
 
+    diag = summary.get("diagnostics") or {}
+    lines.append("## Run diagnostics")
+    lines.append(f"- **Health:** `{diag.get('health', 'n/a')}`")
+    findings = diag.get("findings") or []
+    if findings:
+        lines.append("- **Findings:**")
+        for f in findings:
+            lvl = f.get("level", "?")
+            lines.append(f"  - [{lvl}] {f.get('message', '')} (`{f.get('code', '')}`)")
+    else:
+        lines.append("- No diagnostic findings (run looks healthy on automated checks).")
+    lines.append("")
+
     lines.append(f"## Config hash\n`{summary.get('config_hash', '')}`\n")
     lines.append(f"## Backend\n{summary.get('backend', 'run')}\n")
+    lines.append("\nSee also **run_report.md** for methods-ready detail (citable pipeline, timing, experiment counts).\n")
     return "\n".join(lines)

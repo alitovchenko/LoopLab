@@ -28,6 +28,7 @@ def main() -> None:
 
     proof_p = sub.add_parser("proof-run", help="Canonical proof run: record, replay, benchmark (no hardware)")
     proof_p.add_argument("--backend", choices=["synthetic", "lsl"], default="synthetic", help="synthetic: pure Python, no LSL (CI-safe). lsl: real LSL discovery (default synthetic)")
+    proof_p.add_argument("--config", type=str, default=None, help="Optional config file (YAML/JSON); if set, use its settings and synthetic scenario when present")
     proof_p.add_argument("--duration", "-d", type=float, default=4.0, help="Session duration in seconds (default 4)")
     proof_p.add_argument("--out-dir", type=str, default="proof_run_output", help="Output directory for log and stream (default proof_run_output)")
     proof_p.add_argument("--seed", type=int, default=42, help="Random seed for replay (default 42)")
@@ -38,13 +39,37 @@ def main() -> None:
     report_p.add_argument("--run-dir", help="Run directory (expects events.jsonl, optional benchmark_summary.json)")
     report_p.add_argument("--human", action="store_true", help="Print only human-readable one-page summary")
     report_p.add_argument("--json", action="store_true", help="Print JSON run report (default if no --human)")
-    report_p.add_argument("--write", action="store_true", help="Write run_package_summary.json and RUN_SUMMARY.md into --run-dir")
+    report_p.add_argument(
+        "--write",
+        action="store_true",
+        help="Write run_package_summary.json, RUN_SUMMARY.md, run_report.json, run_report.md into --run-dir",
+    )
 
-    list_p = sub.add_parser("list", help="List registered feature extractors, models, and policies")
+    list_p = sub.add_parser("list", help="List registered plugins (short form; see list-components for detail)")
     list_p.add_argument("--features", action="store_true", help="List only feature extractors")
     list_p.add_argument("--models", action="store_true", help="List only models")
     list_p.add_argument("--policies", action="store_true", help="List only policies")
     list_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    lc_p = sub.add_parser(
+        "list-components",
+        help="List feature extractors, models, policies with class, defaults, and descriptions",
+    )
+    lc_p.add_argument("--features", action="store_true", help="List only feature extractors")
+    lc_p.add_argument("--models", action="store_true", help="List only models")
+    lc_p.add_argument("--policies", action="store_true", help="List only policies")
+    lc_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    vc_p = sub.add_parser("validate-config", help="Validate config: registered names and component instantiation")
+    vc_p.add_argument("--config", "-c", required=True, help="Config YAML or JSON")
+    vc_p.add_argument(
+        "--plugin",
+        action="append",
+        default=[],
+        help="Python file to load first (register custom components); repeat for multiple",
+    )
+    vc_p.add_argument("--strict", action="store_true", help="Treat unrecognized preprocess as error")
+    vc_p.add_argument("--json", action="store_true", help="Print result as JSON")
 
     new_p = sub.add_parser("new", help="Generate a starter plugin file (feature, model, or policy)")
     new_p.add_argument("kind", choices=["feature", "model", "policy"], help="Plugin type")
@@ -189,20 +214,30 @@ def main() -> None:
         log_path = out_dir / "events.jsonl"
         stream_path = out_dir / "stream.jsonl"
 
-        config = RunConfig(
-            lsl=LSLStreamConfig(name="FakeEEG", type="EEG", chunk_size=8, timeout=5.0),
-            buffer=BufferConfig(max_samples=500, n_channels=2),
-            preprocess="none",
-            feature_extractor="simple",
-            model="identity",
-            policy="identity",
-            task_adapter="psychopy",
-            log_path=str(log_path),
-            record_stream_path=str(stream_path),
-            benchmark=True,
-        )
+        if getattr(args, "config", None):
+            from looplab.config.schema import load_config
+            config = load_config(args.config)
+            config.log_path = str(log_path)
+            config.record_stream_path = str(stream_path)
+        else:
+            config = RunConfig(
+                lsl=LSLStreamConfig(name="FakeEEG", type="EEG", chunk_size=8, timeout=5.0),
+                buffer=BufferConfig(max_samples=500, n_channels=2),
+                preprocess="none",
+                feature_extractor="simple",
+                model="identity",
+                policy="identity",
+                task_adapter="psychopy",
+                log_path=str(log_path),
+                record_stream_path=str(stream_path),
+                benchmark=True,
+            )
         with open(out_dir / "config_snapshot.json", "w", encoding="utf-8") as f:
             _json.dump(config_to_dict(config), f, indent=2)
+        from looplab.runner import build_components_manifest
+
+        with open(out_dir / "components_manifest.json", "w", encoding="utf-8") as f:
+            _json.dump(build_components_manifest(config), f, indent=2)
 
         duration = args.duration
         backend = getattr(args, "backend", "synthetic")
@@ -217,18 +252,43 @@ def main() -> None:
 
             from looplab.streams import clock as _clock_mod
             _clock_mod.set_clock(_synthetic_clock)
+            lsl_clock = _clock_mod.lsl_clock
+            start = lsl_clock()
 
             from looplab.runner import create_runner
             from looplab.controller.loop import ControllerLoop
             components = create_runner(config)
-            # Use min_samples=8 so we get one control signal per chunk (chunk_size=8), matching ReplayRunner.
+            adapter = components["adapter"]
+            model = components["model"]
+            policy = components["policy"]
+            syn_cfg = None
+            if getattr(config, "synthetic", None):
+                from looplab.synthetic.config import parse_synthetic_config
+                syn_cfg = parse_synthetic_config(config.synthetic)
+            if syn_cfg:
+                if syn_cfg.ack_delay_ms.enabled or syn_cfg.event_omission.enabled:
+                    from looplab.synthetic.wrappers import SyntheticTaskAdapterWrapper
+                    adapter = SyntheticTaskAdapterWrapper(
+                        adapter, syn_cfg.ack_delay_ms, syn_cfg.event_omission, syn_cfg.seed
+                    )
+                    adapter.set_logger(components["logger"])
+                if syn_cfg.low_confidence.enabled:
+                    from looplab.synthetic.wrappers import LowConfidenceModelWrapper
+                    model = LowConfidenceModelWrapper(
+                        model, syn_cfg.low_confidence, start, lsl_clock
+                    )
+                if syn_cfg.policy_noop.enabled:
+                    from looplab.synthetic.wrappers import NoopPolicyWrapper
+                    policy = NoopPolicyWrapper(
+                        policy, syn_cfg.policy_noop, start, lsl_clock
+                    )
             loop = ControllerLoop(
                 buffer=components["buffer"],
                 preprocess=components["preprocess"],
                 feature_extractor=components["feature_extractor"],
-                model=components["model"],
-                policy=components["policy"],
-                adapter=components["adapter"],
+                model=model,
+                policy=policy,
+                adapter=adapter,
                 logger=components["logger"],
                 min_samples=8,
             )
@@ -242,29 +302,42 @@ def main() -> None:
             if recorder:
                 recorder.open()
 
-            lsl_clock = _clock_mod.lsl_clock
-            start = lsl_clock()
             chunk_interval = 0.02
-            n_channels = 2
-            chunk_size = 8
+            n_channels = getattr(config.buffer, "n_channels", 2)
+            chunk_size = getattr(config.lsl, "chunk_size", 8) or 8
             srate = 50.0
-            rng = _np.random.default_rng(42)
-            _np.random.seed(42)
-            sample_idx = 0
             try:
-                while lsl_clock() - start < duration:
-                    # Generate one chunk (deterministic). Tick once per chunk to match ReplayRunner discipline.
-                    data = rng.standard_normal((chunk_size, n_channels)).astype(_np.float64)
-                    ts_start = start + sample_idx / srate
-                    timestamps = [ts_start + j / srate for j in range(chunk_size)]
-                    sample_idx += chunk_size
-                    buffer.append(data, timestamps)
-                    if hooks:
-                        hooks.record_pull_chunk(lsl_clock())
-                    if recorder:
-                        recorder.record(data, timestamps)
-                    loop.tick()
-                    _time.sleep(chunk_interval)
+                if syn_cfg:
+                    from looplab.synthetic.generator import generate_chunks
+                    for data, timestamps, _valid in generate_chunks(
+                        syn_cfg, duration, n_channels, chunk_size, srate, start, chunk_interval
+                    ):
+                        buffer.append(data, timestamps)
+                        if hooks:
+                            hooks.record_pull_chunk(lsl_clock())
+                        if recorder:
+                            recorder.record(data, timestamps)
+                        loop.tick()
+                        sig = adapter.pop_pending()
+                        if sig is not None:
+                            adapter.report_realized(sig, lsl_clock())
+                        _time.sleep(chunk_interval)
+                else:
+                    rng = _np.random.default_rng(args.seed)
+                    _np.random.seed(args.seed)
+                    sample_idx = 0
+                    while lsl_clock() - start < duration:
+                        data = rng.standard_normal((chunk_size, n_channels)).astype(_np.float64)
+                        ts_start = start + sample_idx / srate
+                        timestamps = [ts_start + j / srate for j in range(chunk_size)]
+                        sample_idx += chunk_size
+                        buffer.append(data, timestamps)
+                        if hooks:
+                            hooks.record_pull_chunk(lsl_clock())
+                        if recorder:
+                            recorder.record(data, timestamps)
+                        loop.tick()
+                        _time.sleep(chunk_interval)
             finally:
                 writer.close()
                 if recorder:
@@ -393,16 +466,27 @@ def main() -> None:
             "backend": backend,
             "timestamp": _datetime.now(_timezone.utc).isoformat().replace("+00:00", "Z"),
         }
-        with open(out_dir / "session_summary.json", "w", encoding="utf-8") as f:
-            _json.dump(session_summary, f, indent=2)
-
-        # Run package summary and markdown
         run_warnings = []
         if not points:
             run_warnings.append("no_benchmark_events")
         if not chunks:
             run_warnings.append("replay_skipped_no_chunks")
+        from looplab.benchmark.diagnostics import write_run_diagnostics_artifacts
         from looplab.benchmark.run_summary import build_run_package_summary, format_run_summary_markdown
+
+        diag, warning_inv = write_run_diagnostics_artifacts(
+            out_dir,
+            event_counts,
+            bench_report,
+            replay_result,
+            out_dir / "events.jsonl",
+            out_dir / "stream.jsonl",
+            session_summary,
+            run_warnings,
+        )
+        with open(out_dir / "session_summary.json", "w", encoding="utf-8") as f:
+            _json.dump(session_summary, f, indent=2)
+
         config_snap = _json.loads((out_dir / "config_snapshot.json").read_text(encoding="utf-8"))
         run_package_summary = build_run_package_summary(
             event_counts,
@@ -412,12 +496,16 @@ def main() -> None:
             replay_result=replay_result,
             config_snapshot=config_snap,
             backend=backend,
-            warnings=run_warnings,
+            warnings=warning_inv,
+            diagnostics=diag,
         )
         with open(out_dir / "run_package_summary.json", "w", encoding="utf-8") as f:
             _json.dump(run_package_summary, f, indent=2)
         with open(out_dir / "RUN_SUMMARY.md", "w", encoding="utf-8") as f:
             f.write(format_run_summary_markdown(run_package_summary))
+        from looplab.benchmark.run_report import write_run_report_artifacts
+
+        write_run_report_artifacts(out_dir)
 
         if not artifacts_ok:
             print("Proof-run: artifact check failed (log or stream missing/empty).", file=sys.stderr)
@@ -479,12 +567,55 @@ def main() -> None:
         if not points:
             report_warnings.append("no_benchmark_events")
         from looplab.benchmark.run_summary import build_run_package_summary, format_run_summary_markdown
+
+        bench_for_diag = bench
+        replay_for_summary = None
+        if run_dir:
+            bp = run_dir / "benchmark_summary.json"
+            if bp.exists():
+                with open(bp, encoding="utf-8") as f:
+                    bench_for_diag = _json.load(f)
+            rp = run_dir / "replay_result.json"
+            if rp.exists():
+                with open(rp, encoding="utf-8") as f:
+                    replay_for_summary = _json.load(f)
+
+        diag = None
+        warning_inv = list(report_warnings)
+        if run_dir and getattr(args, "write", False) and path.resolve().parent == run_dir.resolve():
+            from looplab.benchmark.diagnostics import write_run_diagnostics_artifacts
+
+            session_for_summary = dict(report.get("session_summary") or {})
+            diag, warning_inv = write_run_diagnostics_artifacts(
+                run_dir,
+                report["event_counts"],
+                bench_for_diag,
+                replay_for_summary,
+                path,
+                run_dir / "stream.jsonl",
+                session_for_summary,
+                report_warnings,
+            )
+            report["session_summary"] = session_for_summary
+            with open(run_dir / "session_summary.json", "w", encoding="utf-8") as f:
+                _json.dump(session_for_summary, f, indent=2)
+        elif run_dir:
+            dp = run_dir / "diagnostics.json"
+            if dp.exists():
+                with open(dp, encoding="utf-8") as f:
+                    diag = _json.load(f)
+                for item in diag.get("findings", []):
+                    if item.get("level") in ("warning", "critical"):
+                        warning_inv.append(f"{item['level']}: {item.get('code', '')} — {item.get('message', '')}")
+
         run_package_summary = build_run_package_summary(
             report["event_counts"],
-            bench,
+            bench_for_diag,
             run_dir=run_dir,
             session_summary=report.get("session_summary"),
-            warnings=report_warnings,
+            replay_result=replay_for_summary,
+            warnings=warning_inv,
+            diagnostics=diag,
         )
         report["run_package_summary"] = run_package_summary
         if run_dir and getattr(args, "write", False):
@@ -492,6 +623,9 @@ def main() -> None:
                 _json.dump(run_package_summary, f, indent=2)
             with open(run_dir / "RUN_SUMMARY.md", "w", encoding="utf-8") as f:
                 f.write(format_run_summary_markdown(run_package_summary))
+            from looplab.benchmark.run_report import write_run_report_artifacts
+
+            write_run_report_artifacts(run_dir)
 
         if getattr(args, "human", False):
             lines = [
@@ -605,6 +739,52 @@ register_policy({name!r}, {class_name}, {{"validity_seconds": 1.0}})
         path.write_text(content, encoding="utf-8")
         print(f"Wrote {path}", file=sys.stderr)
 
+    elif args.command == "validate-config":
+        import json as _json
+        from looplab.runner import validate_config_file
+
+        result = validate_config_file(args.config, list(args.plugin or []), strict=getattr(args, "strict", False))
+        if getattr(args, "json", False):
+            print(_json.dumps(result, indent=2))
+        else:
+            for w in result.get("warnings", []):
+                print(f"Warning: {w}", file=sys.stderr)
+            for e in result.get("errors", []):
+                print(f"Error: {e}", file=sys.stderr)
+            if result.get("ok"):
+                print("Config OK.", file=sys.stderr)
+            else:
+                print("Validation failed.", file=sys.stderr)
+        sys.exit(0 if result.get("ok") else 1)
+
+    elif args.command == "list-components":
+        import json as _json
+        from looplab.introspection import build_component_catalog, format_component_catalog_text
+
+        cat = build_component_catalog()
+        show_all = not (
+            getattr(args, "features", False)
+            or getattr(args, "models", False)
+            or getattr(args, "policies", False)
+        )
+        if getattr(args, "json", False):
+            out: dict = {}
+            if show_all or getattr(args, "features", False):
+                out["feature_extractors"] = cat["feature_extractors"]
+            if show_all or getattr(args, "models", False):
+                out["models"] = cat["models"]
+            if show_all or getattr(args, "policies", False):
+                out["policies"] = cat["policies"]
+            print(_json.dumps(out, indent=2))
+        else:
+            text = format_component_catalog_text(
+                cat,
+                features=show_all or getattr(args, "features", False),
+                models=show_all or getattr(args, "models", False),
+                policies=show_all or getattr(args, "policies", False),
+            )
+            print(text)
+
     elif args.command == "list":
         import json as _json
         # Ensure built-ins are registered
@@ -615,39 +795,45 @@ register_policy({name!r}, {class_name}, {{"validity_seconds": 1.0}})
         from looplab.model.base import get_model_registry
         from looplab.controller.policy import get_policy_registry
 
+        def _defaults(entry: tuple) -> dict:
+            return entry[1] if len(entry) >= 2 else {}
+
         show_all = not (getattr(args, "features", False) or getattr(args, "models", False) or getattr(args, "policies", False))
         out = {}
         if getattr(args, "json", False):
             if show_all or getattr(args, "features", False):
                 fe = get_feature_extractor_registry()
-                out["features"] = {name: list(defaults) for name, (_, defaults) in fe.items()}
+                out["features"] = {name: list(_defaults(t)) for name, t in fe.items()}
             if show_all or getattr(args, "models", False):
                 mo = get_model_registry()
-                out["models"] = {name: list(defaults) for name, (_, defaults) in mo.items()}
+                out["models"] = {name: list(_defaults(t)) for name, t in mo.items()}
             if show_all or getattr(args, "policies", False):
                 po = get_policy_registry()
-                out["policies"] = {name: list(defaults) for name, (_, defaults) in po.items()}
+                out["policies"] = {name: list(_defaults(t)) for name, t in po.items()}
             print(_json.dumps(out, indent=2))
         else:
             lines = []
             if show_all or getattr(args, "features", False):
                 fe = get_feature_extractor_registry()
                 lines.append("Feature extractors:")
-                for name, (_, defaults) in sorted(fe.items()):
+                for name, t in sorted(fe.items()):
+                    defaults = _defaults(t)
                     keys = list(defaults) if defaults else []
                     lines.append(f"  {name}" + (f"  (default config keys: {', '.join(keys)})" if keys else ""))
                 lines.append("")
             if show_all or getattr(args, "models", False):
                 mo = get_model_registry()
                 lines.append("Models:")
-                for name, (_, defaults) in sorted(mo.items()):
+                for name, t in sorted(mo.items()):
+                    defaults = _defaults(t)
                     keys = list(defaults) if defaults else []
                     lines.append(f"  {name}" + (f"  (default config keys: {', '.join(keys)})" if keys else ""))
                 lines.append("")
             if show_all or getattr(args, "policies", False):
                 po = get_policy_registry()
                 lines.append("Policies:")
-                for name, (_, defaults) in sorted(po.items()):
+                for name, t in sorted(po.items()):
+                    defaults = _defaults(t)
                     keys = list(defaults) if defaults else []
                     lines.append(f"  {name}" + (f"  (default config keys: {', '.join(keys)})" if keys else ""))
             if lines and lines[-1] == "":

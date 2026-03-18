@@ -37,4 +37,4 @@ class SimpleFeatureExtractor(FeatureExtractor):
         return mean
 
 
-register_feature_extractor("simple", SimpleFeatureExtractor, {"use_variance": True})
+register_feature_extractor("simple", SimpleFeatureExtractor, {"use_variance": True}, component_version="1.0.0")
