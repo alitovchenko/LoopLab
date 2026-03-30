@@ -44,6 +44,9 @@ Repository = "https://github.com/looplab/looplab"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+looplab = ["plugin_templates/*.example"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

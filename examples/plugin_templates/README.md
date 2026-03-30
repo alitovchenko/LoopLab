@@ -9,4 +9,4 @@ Minimal stub files for custom LoopLab plugins. Copy the file for the component t
 5. **Reference** the name in your config (e.g. `feature_extractor: my_feature` in YAML) or pass it to `create_*`.
 6. Run `looplab list` to confirm your plugin appears.
 
-Alternatively, use the CLI to generate a stub: `looplab new feature my_extractor --out-dir .` (same for `model` or `policy`).
+Alternatively, use the CLI to generate a stub from the same templates bundled in the package: `python -m looplab new feature my_extractor --out-dir .` (same for `model` or `policy`). Optional: `--with-config` / `--with-readme`.

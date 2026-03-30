@@ -13,6 +13,14 @@ pip install -e ".[dev,yaml]"   # dev: pytest + PyYAML; yaml: config files
 
 Minimum without YAML tests: `pip install -e .` plus `pip install pyyaml` if you use `.yaml` configs.
 
+**One-liner (install → proof-run → human report, no hardware):** default proof-run uses the **synthetic** backend.
+
+```bash
+python -m venv .venv && source .venv/bin/activate && pip install --upgrade pip && pip install -e ".[yaml]" && python -m looplab proof-run && python -m looplab report --run-dir proof_run_output --human
+```
+
+Or combine proof + report: `python -m looplab proof-run --with-report`. Use **`-v`** / **`-vv`** on `run`, `replay`, or `proof-run` for stderr diagnostics (JSONL remains the analysis source).
+
 Optional: `pip install -e ".[psychopy]"` for PsychoPy demos.
 
 ## 2. Validate config

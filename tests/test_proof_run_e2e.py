@@ -82,6 +82,8 @@ def test_proof_run_e2e():
         assert "E2E" in combined or "e2e" in combined or "Proof-run: all checks passed" in combined, (
             "Benchmark or success message should be present"
         )
+        assert "--- Proof-run success ---" in stderr, "Success banner should be printed"
+        assert "python -m looplab report --run-dir" in stderr, "Next-step report command should be shown"
 
 
 # Expected keys so artifact/report consumers can assume one structure regardless of backend (synthetic or LSL).

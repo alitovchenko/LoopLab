@@ -15,12 +15,26 @@ def main() -> None:
     run_p.add_argument("--config", "-c", required=True, help="Config file (YAML or JSON)")
     run_p.add_argument("--duration", "-d", type=float, default=60.0, help="Run duration in seconds (default 60)")
     run_p.add_argument("--tick-hz", type=float, default=10.0, help="Controller tick rate (default 10)")
+    run_p.add_argument(
+        "-v",
+        action="count",
+        default=0,
+        dest="verbosity",
+        help="Verbose stderr: -v INFO, -vv DEBUG (structured LOOPLAB lines; JSONL remains the analysis source)",
+    )
 
     replay_p = sub.add_parser("replay", help="Replay session from log and recorded stream")
     replay_p.add_argument("--log", required=True, help="Event log JSONL path")
     replay_p.add_argument("--stream", help="Recorded stream path (optional)")
     replay_p.add_argument("--seed", type=int, default=42, help="Random seed for replay")
     replay_p.add_argument("--strict", action="store_true", help="Exit with code 1 if replay diverges from log")
+    replay_p.add_argument(
+        "-v",
+        action="count",
+        default=0,
+        dest="verbosity",
+        help="Verbose stderr: -v INFO, -vv DEBUG",
+    )
 
     bench_p = sub.add_parser("benchmark", help="Print benchmark report from log")
     bench_p.add_argument("--log", required=True, help="Event log JSONL path")
@@ -33,6 +47,18 @@ def main() -> None:
     proof_p.add_argument("--out-dir", type=str, default="proof_run_output", help="Output directory for log and stream (default proof_run_output)")
     proof_p.add_argument("--seed", type=int, default=42, help="Random seed for replay (default 42)")
     proof_p.add_argument("--strict", action="store_true", help="Exit with code 1 if replay diverges from log")
+    proof_p.add_argument(
+        "--with-report",
+        action="store_true",
+        help="After success, print human run report (same as: report --run-dir <out-dir> --human)",
+    )
+    proof_p.add_argument(
+        "-v",
+        action="count",
+        default=0,
+        dest="verbosity",
+        help="Verbose stderr: -v INFO, -vv DEBUG",
+    )
 
     report_p = sub.add_parser("report", help="Unified run report from log or run directory")
     report_p.add_argument("--log", help="Event log JSONL path")
@@ -98,10 +124,32 @@ def main() -> None:
     new_p.add_argument("kind", choices=["feature", "model", "policy"], help="Plugin type")
     new_p.add_argument("name", help="Plugin name (used for registration and file name)")
     new_p.add_argument("--out-dir", type=str, default=".", help="Directory to write the file (default: current)")
+    new_p.add_argument(
+        "--with-config",
+        action="store_true",
+        help="Also write <name>_config.yaml next to the plugin (minimal RunConfig referencing it)",
+    )
+    new_p.add_argument(
+        "--with-readme",
+        action="store_true",
+        help="Also write README_<name>.md with validate-config / list-components / import hints",
+    )
 
     args = parser.parse_args()
 
     if args.command == "run":
+        import logging as _logging
+
+        from looplab.debug_log import setup_looplab_logging
+
+        setup_looplab_logging(min(2, getattr(args, "verbosity", 0)))
+        _logging.getLogger("looplab.runner").info(
+            "run: config=%s duration=%s s tick_hz=%s",
+            args.config,
+            args.duration,
+            args.tick_hz,
+        )
+
         from looplab.config.schema import load_config
         from looplab.runner import create_runner
         from looplab.streams.lsl_client import LSLInletClient
@@ -154,6 +202,13 @@ def main() -> None:
         print("Run finished.", file=sys.stderr)
 
     elif args.command == "replay":
+        import logging as _logging
+
+        from looplab.debug_log import setup_looplab_logging
+
+        setup_looplab_logging(min(2, getattr(args, "verbosity", 0)))
+        _logging.getLogger("looplab.replay").info("replay: log=%s stream=%s", args.log, args.stream)
+
         from looplab.replay.engine import ReplayEngine
         from looplab.replay.runner import ReplayRunner
         from looplab.replay.divergence import compute_divergence, format_divergence_report
@@ -214,10 +269,16 @@ def main() -> None:
 
     elif args.command == "proof-run":
         import json as _json
+        import logging as _logging
         import time as _time
         from pathlib import Path as _Path
 
         import numpy as _np
+
+        from looplab.debug_log import setup_looplab_logging
+
+        setup_looplab_logging(min(2, getattr(args, "verbosity", 0)))
+        _plog = _logging.getLogger("looplab.proof_run")
         from datetime import datetime as _datetime, timezone as _timezone
         from looplab.config.schema import RunConfig, LSLStreamConfig, BufferConfig, config_to_dict
         from looplab.replay.engine import ReplayEngine
@@ -236,6 +297,13 @@ def main() -> None:
         out_dir.mkdir(parents=True, exist_ok=True)
         log_path = out_dir / "events.jsonl"
         stream_path = out_dir / "stream.jsonl"
+        _plog.info(
+            "proof-run: out_dir=%s backend=%s duration=%s seed=%s",
+            out_dir,
+            getattr(args, "backend", "synthetic"),
+            args.duration,
+            args.seed,
+        )
 
         if getattr(args, "config", None):
             from looplab.config.schema import load_config
@@ -366,6 +434,7 @@ def main() -> None:
                 if recorder:
                     recorder.close()
             print("Proof-run: session recorded (synthetic backend).", file=sys.stderr)
+            _plog.info("proof-run: recording phase complete (synthetic)")
         else:
             # LSL backend: real stream discovery (may segfault in CI).
             from looplab.streams import clock as _clock_mod
@@ -384,6 +453,9 @@ def main() -> None:
             except RuntimeError as e:
                 if "No LSL stream" in str(e):
                     print("Proof-run skipped: LSL stream discovery failed (e.g. network/sandbox).", file=sys.stderr)
+                    from looplab.cli.proof_messages import print_proof_lsl_discovery_failed_hint
+
+                    print_proof_lsl_discovery_failed_hint()
                     session_fail = {
                         "lsl_available": False,
                         "lsl_support_tier": "native_lsl_unavailable",
@@ -428,6 +500,9 @@ def main() -> None:
                     recorder.close()
             thread.join(timeout=10)
             print("Proof-run: session recorded (LSL backend).", file=sys.stderr)
+            _plog.info("proof-run: recording phase complete (lsl)")
+
+        _plog.info("proof-run: starting replay")
 
         # Replay
         engine = ReplayEngine(str(log_path), str(stream_path))
@@ -458,6 +533,8 @@ def main() -> None:
             replay_ok = report["matches"] or not args.strict
         with open(out_dir / "replay_result.json", "w", encoding="utf-8") as f:
             _json.dump(replay_result, f, indent=2)
+
+        _plog.info("proof-run: replay phase complete matches=%s", replay_result.get("matches"))
 
         # Benchmark
         points = []
@@ -534,12 +611,29 @@ def main() -> None:
 
         write_run_report_artifacts(out_dir)
 
+        _plog.info("proof-run: artifacts and run report written")
+
         if not artifacts_ok:
             print("Proof-run: artifact check failed (log or stream missing/empty).", file=sys.stderr)
+            print(
+                "  Next: ensure the session wrote events.jsonl and stream.jsonl; check disk space and permissions.",
+                file=sys.stderr,
+            )
             sys.exit(1)
         if not replay_ok:
+            from looplab.cli.proof_messages import print_proof_replay_failure
+
+            print_proof_replay_failure(out_dir, replay_result, strict=bool(args.strict))
             sys.exit(1)
         print("Proof-run: all checks passed.", file=sys.stderr)
+        from looplab.cli.proof_messages import print_proof_success_banner
+
+        print_proof_success_banner(out_dir)
+        if getattr(args, "with_report", False):
+            from looplab.cli.run_report import emit_human_run_report
+
+            print("", file=sys.stderr)
+            emit_human_run_report(out_dir)
 
     elif args.command == "report":
         import json as _json
@@ -655,116 +749,43 @@ def main() -> None:
             write_run_report_artifacts(run_dir)
 
         if getattr(args, "human", False):
-            lines = [
-                f"Run report: {report['log_path']}",
-                f"  Events: {report['n_events']} total",
-                "  By type: " + ", ".join(f"{k}={v}" for k, v in sorted(report["event_counts"].items())),
-                "",
-                format_report_human(bench),
-                "",
-                format_run_summary_markdown(run_package_summary),
-            ]
-            print("\n".join(lines))
+            if run_dir:
+                from looplab.cli.run_report import emit_human_run_report
+
+                emit_human_run_report(run_dir)
+            else:
+                lines = [
+                    f"Run report: {report['log_path']}",
+                    f"  Events: {report['n_events']} total",
+                    "  By type: " + ", ".join(f"{k}={v}" for k, v in sorted(report["event_counts"].items())),
+                    "",
+                    format_report_human(bench),
+                    "",
+                    format_run_summary_markdown(run_package_summary),
+                ]
+                print("\n".join(lines))
         else:
             print(_json.dumps(report, indent=2))
 
     elif args.command == "new":
+        from looplab.plugin_stub import minimal_config_yaml_for_plugin, plugin_readme_md, render_plugin_stub
+
         out_dir = Path(getattr(args, "out_dir", "."))
         out_dir.mkdir(parents=True, exist_ok=True)
         kind = getattr(args, "kind")
         name = getattr(args, "name")
-        class_name = "".join(p.capitalize() for p in name.replace("-", "_").split("_"))
-        if kind == "feature":
-            content = f'''"""Custom feature extractor: {name}. Implement extract() and reference as feature_extractor: {name!r} in config."""
-
-from __future__ import annotations
-
-from typing import Any
-
-import numpy as np
-
-from looplab.features.base import FeatureExtractor, register_feature_extractor
-
-
-class {class_name}(FeatureExtractor):
-    def __init__(self, use_variance: bool = True):
-        self._use_variance = use_variance
-
-    def extract(
-        self,
-        data: np.ndarray,
-        t_start: float,
-        t_end: float,
-        context: dict[str, Any] | None = None,
-    ) -> np.ndarray | dict[str, np.ndarray]:
-        data = np.asarray(data, dtype=np.float64)
-        # TODO: your implementation
-        return data.mean(axis=1)
-
-
-register_feature_extractor({name!r}, {class_name}, {{"use_variance": True}})
-'''
-        elif kind == "model":
-            content = f'''"""Custom model: {name}. Implement run() and reference as model: {name!r} in config."""
-
-from __future__ import annotations
-
-from typing import Any
-
-import numpy as np
-
-from looplab.controller.signals import ModelOutput
-from looplab.model.base import Model, register_model
-
-
-class {class_name}(Model):
-    def run(
-        self,
-        features: np.ndarray,
-        context: dict[str, Any] | None = None,
-    ) -> ModelOutput:
-        # TODO: your implementation
-        f = np.asarray(features).ravel()
-        return ModelOutput(value=float(np.mean(f)), confidence=1.0)
-
-
-register_model({name!r}, {class_name}, {{}})
-'''
-        else:  # policy
-            content = f'''"""Custom policy: {name}. Implement __call__() and reference as policy: {name!r} in config."""
-
-from __future__ import annotations
-
-from typing import Any
-
-from looplab.controller.signals import ControlSignal, ModelOutput
-from looplab.controller.policy import Policy, register_policy
-from looplab.streams.clock import lsl_clock
-
-
-class {class_name}(Policy):
-    def __init__(self, validity_seconds: float = 1.0):
-        self._validity_seconds = validity_seconds
-
-    def __call__(
-        self,
-        model_output: ModelOutput,
-        context: dict[str, Any],
-    ) -> ControlSignal:
-        now = lsl_clock()
-        # TODO: your implementation
-        return ControlSignal(
-            action="set_value",
-            params={{"value": model_output.value}},
-            valid_until_lsl_time=now + self._validity_seconds,
-        )
-
-
-register_policy({name!r}, {class_name}, {{"validity_seconds": 1.0}})
-'''
+        content = render_plugin_stub(kind, name)
         path = out_dir / f"{name}.py"
         path.write_text(content, encoding="utf-8")
         print(f"Wrote {path}", file=sys.stderr)
+        if getattr(args, "with_config", False):
+            cfg_path = out_dir / f"{name}_config.yaml"
+            cfg_path.write_text(minimal_config_yaml_for_plugin(name, kind), encoding="utf-8")
+            print(f"Wrote {cfg_path}", file=sys.stderr)
+        if getattr(args, "with_readme", False):
+            readme_path = out_dir / f"README_{name}.md"
+            readme_path.write_text(plugin_readme_md(name, kind), encoding="utf-8")
+            print(f"Wrote {readme_path}", file=sys.stderr)
 
     elif args.command == "validate-config":
         import json as _json
@@ -774,10 +795,19 @@ register_policy({name!r}, {class_name}, {{"validity_seconds": 1.0}})
         if getattr(args, "json", False):
             print(_json.dumps(result, indent=2))
         else:
-            for w in result.get("warnings", []):
-                print(f"Warning: {w}", file=sys.stderr)
+            pp = result.get("plugin_paths") or []
+            if pp:
+                print("Plugin load order:", file=sys.stderr)
+                for i, p in enumerate(pp, 1):
+                    print(f"  {i}. {p}", file=sys.stderr)
             for e in result.get("errors", []):
                 print(f"Error: {e}", file=sys.stderr)
+            for w in result.get("warnings", []):
+                print(f"Warning: {w}", file=sys.stderr)
+            if result.get("ok") and result.get("components"):
+                print("Resolved components:", file=sys.stderr)
+                for role, info in result["components"].items():
+                    print(f"  {role}: {info['name']} -> {info['class']}", file=sys.stderr)
             if result.get("ok"):
                 print("Config OK.", file=sys.stderr)
             else:

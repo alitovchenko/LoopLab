@@ -1,0 +1,26 @@
+"""Template: custom model. Copy, rename class and register_* name, then implement run()."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+
+from looplab.controller.signals import ModelOutput
+from looplab.model.base import Model, register_model
+
+
+class MyModel(Model):
+    """Replace with your logic: features -> ModelOutput (value, confidence, optional metadata)."""
+
+    def run(
+        self,
+        features: np.ndarray,
+        context: dict[str, Any] | None = None,
+    ) -> ModelOutput:
+        # ... your implementation ...
+        f = np.asarray(features).ravel()
+        return ModelOutput(value=float(np.mean(f)), confidence=1.0)  # placeholder
+
+
+register_model("my_model", MyModel, {})

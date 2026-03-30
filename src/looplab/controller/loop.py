@@ -1,11 +1,15 @@
-"""Controller loop: buffer -> preprocess -> features -> model -> policy -> adapter + logging."""
+"""Controller loop: buffer -> preprocess -> features -> model -> policy + logging."""
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Callable
 
 from looplab.controller.signals import ControlSignal
+from looplab.debug_log import log_debug_event
 from looplab.streams.clock import lsl_clock
+
+_log = logging.getLogger("looplab.controller")
 
 if TYPE_CHECKING:
     from looplab.buffer.ring_buffer import RingBuffer
@@ -43,6 +47,7 @@ class ControllerLoop:
         self._logger = logger
         self._min_samples = min_samples
         self._hooks: Any = None
+        self._tick_idx = 0
 
     def set_logger(self, logger: "EventLogger") -> None:
         self._logger = logger
@@ -55,8 +60,16 @@ class ControllerLoop:
         """
         Run one iteration. Returns ControlSignal if produced, else None (e.g. insufficient data).
         """
+        self._tick_idx += 1
         data, times = self._buffer.get_window()
         if data.shape[0] < self._min_samples:
+            if _log.isEnabledFor(logging.DEBUG) and self._tick_idx <= 3:
+                log_debug_event(
+                    _log,
+                    "controller",
+                    "skip_tick",
+                    {"tick": self._tick_idx, "reason": "insufficient_samples", "have": int(data.shape[0]), "min": self._min_samples},
+                )
             return None
 
         t_start = float(times[0]) if len(times) else 0.0
@@ -114,5 +127,17 @@ class ControllerLoop:
             self._adapter.receive(control)
         if self._hooks:
             self._hooks.record_task_dispatch(lsl_clock())
+
+        if _log.isEnabledFor(logging.DEBUG) and (self._tick_idx <= 5 or self._tick_idx % 50 == 0):
+            log_debug_event(
+                _log,
+                "controller",
+                "tick",
+                {
+                    "tick": self._tick_idx,
+                    "window": [int(data.shape[0]), int(data.shape[1]) if data.ndim == 2 else 0],
+                    "action": control.action,
+                },
+            )
 
         return control

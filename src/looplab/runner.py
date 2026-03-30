@@ -111,6 +111,10 @@ def load_plugin_modules(paths: list[str | Path]) -> None:
         spec.loader.exec_module(mod)
 
 
+def _resolved_plugin_paths(plugin_paths: list[str | Path]) -> list[str]:
+    return [str(Path(p).resolve()) for p in plugin_paths]
+
+
 def validate_config_file(
     config_path: str | Path,
     plugin_paths: list[str | Path] | None = None,
@@ -119,11 +123,13 @@ def validate_config_file(
 ) -> dict[str, Any]:
     """
     Validate config: registered names, preprocess/task_adapter warnings, dry-run instantiate.
-    Returns dict with ok, errors, warnings. Raises nothing; exit code from caller.
+    Returns dict with ok, errors, warnings, plugin_paths, and components (on success).
+    Raises nothing; exit code from caller.
     """
     plugin_paths = plugin_paths or []
     errors: list[str] = []
     warnings: list[str] = []
+    resolved_plugins = _resolved_plugin_paths(plugin_paths)
 
     for p in plugin_paths:
         try:
@@ -132,7 +138,12 @@ def validate_config_file(
             errors.append(f"plugin {p}: {e}")
 
     if errors:
-        return {"ok": False, "errors": errors, "warnings": warnings}
+        return {
+            "ok": False,
+            "errors": errors,
+            "warnings": warnings,
+            "plugin_paths": resolved_plugins,
+        }
 
     config = load_config(config_path)
 
@@ -140,7 +151,12 @@ def validate_config_file(
         validate_plugin_names(config)
     except UnknownComponentError as e:
         errors.append(str(e))
-        return {"ok": False, "errors": errors, "warnings": warnings}
+        return {
+            "ok": False,
+            "errors": errors,
+            "warnings": warnings,
+            "plugin_paths": resolved_plugins,
+        }
 
     pp = (config.preprocess or "").lower()
     if pp != "none" and "detrend" not in pp and "zscore" not in pp:
@@ -169,8 +185,34 @@ def validate_config_file(
         errors.append(f"policy {config.policy!r} instantiation failed: {e}")
 
     if errors:
-        return {"ok": False, "errors": errors, "warnings": warnings}
-    return {"ok": True, "errors": [], "warnings": warnings}
+        return {
+            "ok": False,
+            "errors": errors,
+            "warnings": warnings,
+            "plugin_paths": resolved_plugins,
+        }
+    manifest = build_components_manifest(config)
+    components = {
+        "feature_extractor": {
+            "name": config.feature_extractor,
+            "class": manifest["feature_extractor"].get("class", ""),
+        },
+        "model": {
+            "name": config.model,
+            "class": manifest["model"].get("class", ""),
+        },
+        "policy": {
+            "name": config.policy,
+            "class": manifest["policy"].get("class", ""),
+        },
+    }
+    return {
+        "ok": True,
+        "errors": [],
+        "warnings": warnings,
+        "plugin_paths": resolved_plugins,
+        "components": components,
+    }
 
 
 def create_runner(config: RunConfig) -> dict[str, Any]:

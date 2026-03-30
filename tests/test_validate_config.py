@@ -34,6 +34,9 @@ def test_validate_config_ok_builtin(tmp_path: Path):
     r = validate_config_file(p)
     assert r["ok"] is True
     assert not r["errors"]
+    assert r.get("plugin_paths") == []
+    assert r.get("components") and "feature_extractor" in r["components"]
+    assert "class" in r["components"]["feature_extractor"]
 
 
 def test_validate_config_unknown_model(tmp_path: Path):
@@ -117,6 +120,7 @@ def test_validate_config_cli_subprocess():
             text=True,
         )
         assert out.returncode == 0, out.stderr
+        assert "Resolved components:" in out.stderr
 
 
 def test_list_components_json():

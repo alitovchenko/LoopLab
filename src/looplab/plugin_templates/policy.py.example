@@ -1,0 +1,32 @@
+"""Template: custom policy. Copy, rename class and register_* name, then implement __call__()."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from looplab.controller.signals import ControlSignal, ModelOutput
+from looplab.controller.policy import Policy, register_policy
+from looplab.streams.clock import lsl_clock
+
+
+class MyPolicy(Policy):
+    """Replace with your logic: model output + context -> ControlSignal (action, params, valid_until_lsl_time)."""
+
+    def __init__(self, validity_seconds: float = 1.0):
+        self._validity_seconds = validity_seconds
+
+    def __call__(
+        self,
+        model_output: ModelOutput,
+        context: dict[str, Any],
+    ) -> ControlSignal:
+        now = lsl_clock()
+        # ... your implementation ...
+        return ControlSignal(
+            action="set_value",
+            params={"value": model_output.value},
+            valid_until_lsl_time=now + self._validity_seconds,
+        )  # placeholder
+
+
+register_policy("my_policy", MyPolicy, {"validity_seconds": 1.0})

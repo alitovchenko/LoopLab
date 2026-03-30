@@ -44,7 +44,15 @@ pip install -e ".[psychopy]"
 pip install -e ".[full]"
 ```
 
-Requires Python 3.10+, `numpy`, `pylsl`.
+Requires Python 3.10+, `numpy`, `pylsl`, `jsonschema`.
+
+**Fast path (install → proof-run → human report):** from a repo checkout, this verifies the pipeline with no EEG hardware (default backend is `synthetic`):
+
+```bash
+python -m venv .venv && . .venv/bin/activate && pip install --upgrade pip && pip install -e ".[yaml]" && python -m looplab proof-run && python -m looplab report --run-dir proof_run_output --human
+```
+
+Same without a separate report step: `python -m looplab proof-run --with-report` (prints the one-page report after success). Extras: **`[yaml]`** for PyYAML if you use `.yaml` configs; **`[dev]`** adds pytest for the test suite.
 
 ## Testing
 
@@ -118,13 +126,13 @@ A **proof run** verifies the pipeline end-to-end: one command, no EEG hardware, 
 python -m looplab proof-run
 ```
 
-Optional flags: `--duration 4` (seconds), `--out-dir proof_run_output`, `--seed 42`, `--strict` (exit 1 if replay diverges).
+Optional flags: `--duration 4` (seconds), `--out-dir proof_run_output`, `--seed 42`, `--strict` (exit 1 if replay diverges), **`--with-report`** (after success, print the same output as `report --run-dir <out-dir> --human`), **`-v` / `-vv`** (stderr INFO / DEBUG: phase lines and optional `LOOPLAB {...}` JSON lines; **`events.jsonl`** remains the analysis source).
 
 **What to expect:** A short session runs (a few seconds), then:
 - Replay: `Replay: N/N control signals matched (determinism OK).`
 - Benchmark: human-readable summary, e.g. `E2E latency (chunk→control): mean 0.012 s (N samples)`.
-- Final line: `Proof-run: all checks passed.`
-- Exit code 0 means all checks passed; exit code 2 means LSL discovery failed (e.g. in a restricted environment).
+- Final line: `Proof-run: all checks passed.`, then a **success block** with exit code 0, copy-paste shell checks, and the exact `report --run-dir … --human` command.
+- Exit code 0 means all checks passed; exit code 2 means LSL discovery failed (e.g. in a restricted environment)—stderr explains using **`--backend synthetic`** or **`check-lsl`**. If replay fails (`--strict` or mismatch), stderr lists **`replay_result.json`** and **`events.jsonl`** and suggested next steps.
 
 **Run report:** For any run (or proof-run output directory), generate a unified report:  
 `python -m looplab report --run-dir proof_run_output` or `--log session.jsonl`. Use `--human` for a one-page summary, or default JSON with event counts and timing (e2e, intended→realized, per-stage latencies and jitter when benchmark events are present).
@@ -174,7 +182,8 @@ No hardware or config file required. Another developer can clone the repo, `pip 
 | `python -m looplab validate-config --config path/to/config.yaml` | Check that `feature_extractor`, `model`, and `policy` are registered and that `*_config` can instantiate each component. |
 | `python -m looplab validate-config --config ... --plugin path/to/plugins.py` | Load a plugin module first (same as demos that `import plugins` before `create_runner`). Repeat `--plugin` for multiple files. |
 | `validate-config … --strict` / `--json` | Optional: fail on preprocess/task_adapter warnings (`--strict`); structured exit payload (`--json`). |
-| `python -m looplab new feature\|model\|policy <name>` | Write a starter `.py` next to [examples/plugin_templates/](examples/plugin_templates/). |
+| `python -m looplab new feature\|model\|policy <name>` | Write a starter `.py` from bundled templates (same as [examples/plugin_templates/](examples/plugin_templates/)). Optional **`--with-config`** / **`--with-readme`**. |
+| [Custom component walkthrough](docs/extensions/custom_component_walkthrough.md) | Five-minute path: `new` → validate → run. |
 | `python -m looplab check-lsl` | Probe native LSL; see [docs/deployment/lsl_compatibility_matrix.md](docs/deployment/lsl_compatibility_matrix.md). |
 | `python -m looplab export-bids --run-dir … --bids-root … --sub …` | BIDS + FIF export (`pip install -e ".[export]"`); see [docs/export_formats.md](docs/export_formats.md). |
 

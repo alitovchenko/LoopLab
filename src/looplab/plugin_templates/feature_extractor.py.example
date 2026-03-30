@@ -1,0 +1,31 @@
+"""Template: custom feature extractor. Copy, rename class and register_* name, then implement extract()."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+
+from looplab.features.base import FeatureExtractor, register_feature_extractor
+
+
+class MyFeatureExtractor(FeatureExtractor):
+    """Replace with your logic: window (n_channels, n_times) -> feature vector or dict."""
+
+    def __init__(self, use_variance: bool = True):
+        self._use_variance = use_variance
+
+    def extract(
+        self,
+        data: np.ndarray,
+        t_start: float,
+        t_end: float,
+        context: dict[str, Any] | None = None,
+    ) -> np.ndarray | dict[str, np.ndarray]:
+        # data shape (n_channels, n_times); return 1D array or dict of named arrays
+        data = np.asarray(data, dtype=np.float64)
+        # ... your implementation ...
+        return data.mean(axis=1)  # placeholder
+
+
+register_feature_extractor("my_feature", MyFeatureExtractor, {"use_variance": True})
