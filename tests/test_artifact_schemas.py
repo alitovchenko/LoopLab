@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import jsonschema
 import pytest
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "artifact_contracts"
@@ -85,11 +86,7 @@ def test_run_report_contract():
 
 
 def test_fixtures_validate_against_json_schema():
-    """Requires jsonschema (LoopLab [dev]); skips if absent."""
-    try:
-        import jsonschema
-    except ImportError:
-        pytest.skip("jsonschema not installed (pip install -e '.[dev]')")
+    """Validates minimal fixtures against schemas/ (jsonschema is a core dependency)."""
     for name in ARTIFACTS:
         schema_path = SCHEMAS / f"{name}.schema.json"
         with open(schema_path, encoding="utf-8") as f:

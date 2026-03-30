@@ -6,5 +6,6 @@
 | [PsychoPy task integration](psychopy_task_integration.md) | Same-process task + loop |
 | [LSL compatibility matrix](lsl_compatibility_matrix.md) | Policy ↔ `lsl_support_tier`; `check-lsl` examples (human, JSON, run report) |
 | [LSL caveats](lsl_caveats.md) | Live streams, practical caveats |
+| [Export formats](../export_formats.md) | BIDS + MNE FIF from a run directory (`export-bids`) |
 
 Start with synthetic locally, then add PsychoPy or LSL as needed.

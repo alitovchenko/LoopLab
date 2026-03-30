@@ -24,13 +24,15 @@ classifiers = [
 dependencies = [
     "numpy>=1.24",
     "pylsl>=1.16",
+    "jsonschema>=4",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "PyYAML>=6", "jsonschema>=4"]
+dev = ["pytest>=7", "PyYAML>=6"]
 mne = ["mne>=1.5"]
 psychopy = ["psychopy>=2023.2"]
 yaml = ["pyyaml>=6"]
+export = ["mne>=1.5"]
 full = ["looplab[mne,psychopy,yaml]"]
 
 [project.scripts]

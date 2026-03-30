@@ -8,7 +8,7 @@ LoopLab is a research-grade orchestration framework that sits between streaming 
 
 **New users:** start at **[docs/index.md](docs/index.md)** → [Quickstart](docs/quickstart.md) (install → validate config → synthetic proof-run → run report), then [Concepts](docs/concepts/index.md), [Tutorials](docs/tutorials/index.md), [Extensions](docs/extensions/index.md), [Deployment](docs/deployment/index.md).
 
-**Run artifacts:** JSON contracts and stable vs experimental fields are documented in **[docs/artifact_schemas.md](docs/artifact_schemas.md)** (`schemas/*.schema.json` for validation).
+**Run artifacts:** JSON contracts and stable vs experimental fields are documented in **[docs/artifact_schemas.md](docs/artifact_schemas.md)** (`schemas/*.schema.json` for validation). **BIDS / MNE export** from a run directory: **[docs/export_formats.md](docs/export_formats.md)** (`python -m looplab export-bids`, optional `pip install -e ".[export]"`).
 
 ## Features
 
@@ -175,6 +175,8 @@ No hardware or config file required. Another developer can clone the repo, `pip 
 | `python -m looplab validate-config --config ... --plugin path/to/plugins.py` | Load a plugin module first (same as demos that `import plugins` before `create_runner`). Repeat `--plugin` for multiple files. |
 | `validate-config … --strict` / `--json` | Optional: fail on preprocess/task_adapter warnings (`--strict`); structured exit payload (`--json`). |
 | `python -m looplab new feature\|model\|policy <name>` | Write a starter `.py` next to [examples/plugin_templates/](examples/plugin_templates/). |
+| `python -m looplab check-lsl` | Probe native LSL; see [docs/deployment/lsl_compatibility_matrix.md](docs/deployment/lsl_compatibility_matrix.md). |
+| `python -m looplab export-bids --run-dir … --bids-root … --sub …` | BIDS + FIF export (`pip install -e ".[export]"`); see [docs/export_formats.md](docs/export_formats.md). |
 
 Unknown component errors suggest **`list-components`** and **`validate-config`**. After **`proof-run`**, see **`components_manifest.json`** for exactly what was wired.
 

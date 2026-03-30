@@ -1,5 +1,7 @@
 # Benchmarking protocol
 
+For **BIDS / MNE export** of the same run’s `stream.jsonl` (continuous EEG) and mapped events, see [Export formats](export_formats.md).
+
 LoopLab records **timing in LSL local time** (or the process **synthetic clock** override). This page defines what each measure means, how it is computed, and how to interpret **synthetic**, **PsychoPy**, and **native LSL** runs.
 
 ## Three timing layers (do not conflate)

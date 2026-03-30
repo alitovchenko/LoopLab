@@ -19,3 +19,5 @@ python -m looplab report --run-dir <dir> --write
 **PsychoPy e2e:** With `paradigm: psychopy_e2e`, run_report adds **Task-level summary (PsychoPy bridge)** (trials, stimulus intended/realized counts, etc.).
 
 See: [Quickstart](../quickstart.md), [Benchmarking](../benchmarking.md).
+
+**Offline interchange:** To export continuous EEG and events to **BIDS** / **MNE** (FIF) for lab pipelines, see [Export formats](../export_formats.md) and `python -m looplab export-bids` (optional `mne`).

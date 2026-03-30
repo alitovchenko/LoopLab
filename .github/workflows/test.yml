@@ -67,3 +67,26 @@ jobs:
 
       - name: check-lsl probe (monitoring)
         run: .venv/bin/python -m looplab check-lsl --json || true
+
+  # Optional: BIDS/MNE export tests (mne dependency). Does not gate the workflow.
+  test-export-mne:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Create venv
+        run: python -m venv .venv
+
+      - name: Install package with export extra (mne)
+        run: |
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e .[dev,export]
+
+      - name: BIDS export tests
+        run: .venv/bin/python -m pytest tests/test_export_bids.py -v

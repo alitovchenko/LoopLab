@@ -77,6 +77,23 @@ def main() -> None:
     )
     check_lsl_p.add_argument("--json", action="store_true", help="Machine-readable result and exit code")
 
+    export_bids_p = sub.add_parser(
+        "export-bids",
+        help="Export run dir to BIDS + FIF (requires: pip install -e \".[mne]\"; docs/export_formats.md)",
+    )
+    export_bids_p.add_argument("--run-dir", required=True, help="LoopLab run directory (stream.jsonl, events.jsonl)")
+    export_bids_p.add_argument("--bids-root", required=True, help="BIDS dataset root directory")
+    export_bids_p.add_argument("--sub", required=True, help="BIDS subject label (e.g. 01 → sub-01)")
+    export_bids_p.add_argument("--task", default="closedloop", help="BIDS task label")
+    export_bids_p.add_argument("--ses", default=None, help="Optional session label")
+    export_bids_p.add_argument("--run", type=int, default=1, help="Run index (default 1)")
+    export_bids_p.add_argument("--overwrite", action="store_true", help="Overwrite existing export files")
+    export_bids_p.add_argument(
+        "--include-all-events",
+        action="store_true",
+        help="Include stream_chunk and features rows in events.tsv (can be large)",
+    )
+
     new_p = sub.add_parser("new", help="Generate a starter plugin file (feature, model, or policy)")
     new_p.add_argument("kind", choices=["feature", "model", "policy"], help="Plugin type")
     new_p.add_argument("name", help="Plugin name (used for registration and file name)")
@@ -788,6 +805,31 @@ register_policy({name!r}, {class_name}, {{"validity_seconds": 1.0}})
             if r.get("error") and not r.get("discovery_ok") and r.get("pylsl_available"):
                 print(f"  ({r['error']})", file=sys.stderr)
         sys.exit(check_lsl_exit_code(r))
+
+    elif args.command == "export-bids":
+        import json as _json
+
+        try:
+            from looplab.export.bids_export import export_run_to_bids
+        except ImportError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+        try:
+            out = export_run_to_bids(
+                args.run_dir,
+                args.bids_root,
+                sub=args.sub,
+                task=args.task,
+                ses=getattr(args, "ses", None) or None,
+                run=int(args.run),
+                overwrite=bool(getattr(args, "overwrite", False)),
+                include_all_events=bool(getattr(args, "include_all_events", False)),
+            )
+        except Exception as e:
+            print(f"export-bids failed: {e}", file=sys.stderr)
+            sys.exit(1)
+        print(_json.dumps(out, indent=2))
+        sys.exit(0)
 
     elif args.command == "list-components":
         import json as _json
